@@ -1,0 +1,83 @@
+<div class="home-container">
+  <h1>Welcome to DSA Table</h1>
+  
+  <div class="dashboard-grid">
+    <!-- Characters Box -->
+    <div class="dashboard-box">
+      <div class="box-header">
+        <h2>Characters</h2>
+        <button class="btn btn-link" (click)="navigateToCharacters()">View All →</button>
+      </div>
+      
+      <div *ngIf="charactersLoading" class="loading">Loading characters...</div>
+      <div *ngIf="charactersError" class="error-message">{{ charactersError }}</div>
+      
+      <div *ngIf="!charactersLoading && !charactersError" class="box-content">
+        <div *ngIf="characters.length === 0" class="empty-state">
+          <p>No characters found.</p>
+          <button class="btn btn-primary" (click)="navigateToCharacters()">Create Character</button>
+        </div>
+        
+        <ul *ngIf="characters.length > 0" class="item-list">
+          <li *ngFor="let character of characters" class="item-card" (click)="navigateToCharacter(character.id!)">
+            <div class="item-content">
+              <div class="item-avatar">
+                <img [src]="getAvatarUrl(character)" [alt]="character.name + ' avatar'" [title]="character.name + ' avatar'" class="avatar-img-home">
+              </div>
+              <div class="item-info">
+                <h3>{{ character.name }}</h3>
+                <p *ngIf="character.race || character.profession" class="item-meta">
+                  {{ character.race }}<span *ngIf="character.race && character.profession"> • </span>{{ character.profession }}
+                </p>
+              </div>
+            </div>
+            <div class="item-stats" *ngIf="character.currentLife !== undefined || character.currentAsp !== undefined">
+              <span *ngIf="character.currentLife !== undefined" class="stat">
+                <strong>LP:</strong> {{ character.currentLife }}
+              </span>
+              <span *ngIf="character.currentAsp !== undefined" class="stat">
+                <strong>ASP:</strong> {{ character.currentAsp }}
+              </span>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Game Sessions Box -->
+    <div class="dashboard-box">
+      <div class="box-header">
+        <h2>Game Sessions</h2>
+        <button class="btn btn-link" (click)="navigateToSessions()">View All →</button>
+      </div>
+      
+      <div *ngIf="sessionsLoading" class="loading">Loading game sessions...</div>
+      <div *ngIf="sessionsError" class="error-message">{{ sessionsError }}</div>
+      
+      <div *ngIf="!sessionsLoading && !sessionsError" class="box-content">
+        <div *ngIf="sessions.length === 0" class="empty-state">
+          <p>No game sessions found.</p>
+          <button class="btn btn-primary" (click)="navigateToSessions()">Create Session</button>
+        </div>
+        
+        <ul *ngIf="sessions.length > 0" class="item-list">
+          <li *ngFor="let session of sessions" class="item-card" (click)="navigateToSession(session.id!)">
+            <div class="item-info">
+              <h3>{{ session.title }}</h3>
+              <p *ngIf="session.description" class="item-description">{{ session.description }}</p>
+              <p class="item-meta" *ngIf="session.gameMaster">
+                <strong>GM:</strong> {{ session.gameMaster.displayName }}
+              </p>
+            </div>
+            <div class="item-stats" *ngIf="session.characters && session.characters.length > 0">
+              <span class="stat">
+                <strong>{{ session.characters.length }}</strong> character(s)
+              </span>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+

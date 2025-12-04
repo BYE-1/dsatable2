@@ -1,0 +1,227 @@
+.session-list-container {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+
+  h1 {
+    margin: 0;
+    color: #5a4630;
+    font-family: 'Caveat', cursive;
+    font-size: 2.5rem;
+  }
+}
+
+.filter-section {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px dashed #d4c4a8;
+}
+
+.filter-btn {
+  padding: 0.5rem 1.5rem;
+  border: 2px solid #d4c4a8;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+  font-weight: 500;
+
+  &:hover {
+    border-color: #8b7550;
+    color: #6b5638;
+    transform: translateY(-1px);
+  }
+
+  &.active {
+    background: #8b7550;
+    color: #fefcf8;
+    border-color: #6b5638;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.loading, .error-message {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+.error-message {
+  color: #dc3545;
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+}
+
+.sessions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
+}
+
+.session-card {
+  background: #fefcf8;
+  background-image: 
+    linear-gradient(90deg, transparent 79px, rgba(139, 117, 80, 0.08) 81px, rgba(139, 117, 80, 0.08) 82px, transparent 84px),
+    linear-gradient(#fefcf8 0.1em, transparent 0.1em);
+  background-size: 100% 1.5em;
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    inset 0 0 0 1px rgba(139, 117, 80, 0.15);
+  border: 2px dashed #d4c4a8;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: rgba(220, 20, 60, 0.2);
+    border-radius: 10px 0 0 10px;
+  }
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.15),
+      inset 0 0 0 1px rgba(139, 117, 80, 0.25);
+    border-color: #8b7550;
+  }
+}
+
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+
+  h3 {
+    margin: 0;
+    color: #333;
+    flex: 1;
+  }
+}
+
+.session-badges {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+
+  &.badge-gm {
+    background: #ffc107;
+    color: #333;
+  }
+}
+
+.session-description {
+  color: #666;
+  margin-bottom: 1rem;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.session-info {
+  margin-bottom: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+.info-item {
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: #555;
+
+  strong {
+    color: #333;
+  }
+}
+
+.session-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.3s;
+
+  &.btn-primary {
+    background-color: #8b7550;
+    color: #fefcf8;
+    border: 2px solid #6b5638;
+
+    &:hover {
+      background-color: #6b5638;
+      transform: translateY(-1px);
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+    }
+  }
+
+  &.btn-secondary {
+    background-color: rgba(139, 117, 80, 0.2);
+    color: #5a4630;
+    border: 2px solid #8b7550;
+
+    &:hover {
+      background-color: rgba(139, 117, 80, 0.3);
+      transform: translateY(-1px);
+    }
+  }
+
+  &.btn-danger {
+    background-color: #a0522d;
+    color: #fefcf8;
+    border: 2px solid #8b4513;
+
+    &:hover {
+      background-color: #8b4513;
+      transform: translateY(-1px);
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+    }
+  }
+}
+
+.empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+
+  p {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+}
+

@@ -1,0 +1,61 @@
+<div class="form-container">
+  <div class="form-card">
+    <div class="form-header">
+      <h1>{{ isEditMode ? 'Edit Game Session' : 'Create New Game Session' }}</h1>
+      <a routerLink="/sessions" class="back-link">← Back to Sessions</a>
+    </div>
+
+    <form [formGroup]="sessionForm" (ngSubmit)="onSubmit()">
+      <div class="form-group">
+        <label for="title">Title *</label>
+        <input
+          id="title"
+          type="text"
+          formControlName="title"
+          class="form-control"
+          [class.error]="sessionForm.get('title')?.invalid && sessionForm.get('title')?.touched"
+          placeholder="Enter session title"
+          maxlength="128"
+        />
+        <div *ngIf="sessionForm.get('title')?.invalid && sessionForm.get('title')?.touched" class="error-message">
+          <span *ngIf="sessionForm.get('title')?.errors?.['required']">Title is required</span>
+          <span *ngIf="sessionForm.get('title')?.errors?.['maxlength']">Title must be 128 characters or less</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="description">Description</label>
+        <textarea
+          id="description"
+          formControlName="description"
+          class="form-control textarea"
+          [class.error]="sessionForm.get('description')?.invalid && sessionForm.get('description')?.touched"
+          placeholder="Enter session description (optional)"
+          rows="6"
+          maxlength="1024"
+        ></textarea>
+        <div class="char-count">
+          {{ sessionForm.get('description')?.value?.length || 0 }} / 1024 characters
+        </div>
+        <div *ngIf="sessionForm.get('description')?.invalid && sessionForm.get('description')?.touched" class="error-message">
+          Description must be 1024 characters or less
+        </div>
+      </div>
+
+      <div *ngIf="error" class="error-message server-error">
+        {{ error }}
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" (click)="cancel()" [disabled]="loading">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary" [disabled]="sessionForm.invalid || loading">
+          <span *ngIf="!loading">{{ isEditMode ? 'Update' : 'Create' }} Session</span>
+          <span *ngIf="loading">Saving...</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+

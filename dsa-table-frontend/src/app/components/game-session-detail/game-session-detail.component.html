@@ -1,0 +1,273 @@
+<div class="session-detail-container">
+  <div *ngIf="loading" class="loading">Loading game session...</div>
+  
+  <div *ngIf="error" class="error-message">
+    {{ error }}
+  </div>
+
+  <!-- Character Selection Modal for Non-GM Users -->
+  <div *ngIf="showCharacterSelection && !loading && session" class="character-selection-overlay">
+    <div class="character-selection-modal">
+      <h2>Join Game Session</h2>
+      <p>Please select a character to join this session:</p>
+      
+      <div *ngIf="availableCharacters.length === 0" class="no-characters">
+        <p>You don't have any characters yet. Please create a character first.</p>
+      </div>
+      
+      <div *ngIf="availableCharacters.length > 0" class="character-selection">
+        <select 
+          [(ngModel)]="selectedCharacterId" 
+          class="character-select"
+          [disabled]="joiningSession">
+          <option [value]="null" disabled>Select a character...</option>
+          <option *ngFor="let char of availableCharacters" [value]="char.id">
+            {{ char.name }} 
+            <span *ngIf="char.race || char.profession">
+              ({{ char.race || '' }}{{ char.race && char.profession ? ', ' : '' }}{{ char.profession || '' }})
+            </span>
+          </option>
+        </select>
+        
+        <div class="selection-actions">
+          <button 
+            (click)="joinSession()" 
+            [disabled]="!selectedCharacterId || joiningSession"
+            class="join-button">
+            <span *ngIf="!joiningSession">Join Session</span>
+            <span *ngIf="joiningSession">Joining...</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="!loading && !error && session && !showCharacterSelection" class="session-layout">
+    <!-- Top Header -->
+    <div class="session-header">
+      <div class="header-content">
+        <h1 class="session-title">{{ session.title }}</h1>
+        <div class="session-users">
+          <div class="user-group" *ngIf="session.gameMaster">
+            <span class="user-label">GM:</span>
+            <span class="user-name">{{ session.gameMaster.displayName }}</span>
+          </div>
+          <div class="user-group" *ngIf="session.players && session.players.length > 0">
+            <span class="user-label">Players:</span>
+            <span class="user-list">
+              <span *ngFor="let player of session.players; let last = last">
+                {{ player.displayName }}<span *ngIf="!last">, </span>
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="header-characters" *ngIf="characters.length > 0">
+        <div *ngFor="let character of characters" class="character-box">
+          <img [src]="getAvatarUrl(character)" [alt]="character.name + ' avatar'" [title]="character.name + ' avatar'" class="character-box-avatar">
+          <div class="character-box-info">
+            <div class="character-box-name">{{ character.name }}</div>
+            <div class="character-box-life">
+              <div class="life-progress-bar">
+                <div 
+                  class="life-progress-fill" 
+                  [style.width.%]="getLifePercentage(character)"
+                  [class.life-low]="getLifePercentage(character) < 25"
+                  [class.life-medium]="getLifePercentage(character) >= 25 && getLifePercentage(character) < 50">
+                </div>
+              </div>
+              <span class="life-text">{{ character.currentLife ?? 0 }}/{{ character.totalLife ?? character.currentLife ?? 0 }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="session-main">
+      <!-- Left Sidebar - Characters by Initiative -->
+      <div class="characters-sidebar">
+        <h2 class="sidebar-title">Initiative Order</h2>
+        <div class="characters-list">
+          <div 
+            *ngFor="let character of characters; let i = index" 
+            class="character-initiative-item"
+            [class.current-turn]="i === 0">
+            <div class="initiative-number">{{ i + 1 }}</div>
+            <div class="character-info">
+              <div class="character-name">{{ character.name }}</div>
+              <div class="character-stats">
+                <span *ngIf="character.initiative !== undefined" class="stat">
+                  Init: {{ character.initiative }}
+                </span>
+                <span *ngIf="character.currentLife !== undefined" class="stat life">
+                  LP: {{ character.currentLife }}
+                </span>
+                <span *ngIf="character.currentAsp !== undefined" class="stat asp">
+                  ASP: {{ character.currentAsp }}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div *ngIf="characters.length === 0" class="no-characters">
+            No characters in this session
+          </div>
+        </div>
+      </div>
+
+      <!-- Middle - Chat -->
+      <div class="chat-area">
+        <app-chat #chatComponent [sessionId]="sessionId!" *ngIf="sessionId"></app-chat>
+      </div>
+    </div>
+
+    <!-- Bottom - Dice Roll Menu -->
+    <div class="dice-menu">
+      <h3 class="dice-menu-title">Dice Rolls</h3>
+      <div class="dice-buttons">
+        <button class="dice-btn" (click)="rollDice(20)">
+          <span class="dice-icon">🎲</span>
+          <span class="dice-label">d20</span>
+        </button>
+        <button class="dice-btn" (click)="rollDice(6)">
+          <span class="dice-icon">🎲</span>
+          <span class="dice-label">d6</span>
+        </button>
+        <button class="dice-btn" (click)="rollDice(100)">
+          <span class="dice-icon">🎲</span>
+          <span class="dice-label">d100</span>
+        </button>
+        <button class="dice-btn custom" (click)="showCustomRoll = !showCustomRoll">
+          <span class="dice-icon">⚙️</span>
+          <span class="dice-label">Custom</span>
+        </button>
+      </div>
+      <div *ngIf="showCustomRoll" class="custom-roll-panel">
+        <input 
+          type="number" 
+          [(ngModel)]="customDiceSides" 
+          placeholder="Sides"
+          class="dice-input"
+          min="2"
+          max="1000">
+        <button class="dice-btn" (click)="rollCustomDice()">Roll</button>
+      </div>
+      <div *ngIf="myCharacter && myCharacter.talents && myCharacter.talents.length > 0" class="talent-roll-panel">
+        <div class="talent-select-wrapper">
+          <input
+            type="text"
+            [(ngModel)]="talentSearchTerm"
+            (focus)="showTalentDropdown = true; highlightedTalentIndex = -1"
+            (blur)="onTalentInputBlur()"
+            (keydown)="onTalentInputKeyDown($event)"
+            (input)="highlightedTalentIndex = -1"
+            [placeholder]="getSelectedTalentName()"
+            class="talent-search-input"
+            [disabled]="!myCharacter.talents || myCharacter.talents.length === 0"
+            title="Search and select a talent">
+          <div *ngIf="showTalentDropdown && getFilteredTalents().length > 0" class="talent-dropdown">
+            <div
+              *ngFor="let talent of getFilteredTalents(); let i = index"
+              (mousedown)="selectTalent(talent.id!)"
+              (mouseenter)="highlightedTalentIndex = i"
+              class="talent-option"
+              [class.highlighted]="isTalentHighlighted(i)">
+              <span class="talent-name">{{ talent.name }}</span>
+              <span class="talent-details">({{ talent.check }}) - {{ talent.value }}</span>
+            </div>
+          </div>
+          <div *ngIf="showTalentDropdown && getFilteredTalents().length === 0 && talentSearchTerm.trim()" class="talent-dropdown">
+            <div class="talent-option no-results">No talents found</div>
+          </div>
+        </div>
+        <button 
+          class="dice-btn" 
+          (click)="rollTalentCheck()"
+          [disabled]="!selectedTalentId">
+          Roll Talent Check
+        </button>
+      </div>
+      
+      <!-- Character Stat Modifications -->
+      <div *ngIf="myCharacter" class="character-stats-panel">
+        <button class="dice-btn stat-btn" (click)="showLifeMod = !showLifeMod">
+          <span class="dice-icon">❤️</span>
+          <span class="dice-label">Life</span>
+        </button>
+        <button class="dice-btn stat-btn" (click)="showAspMod = !showAspMod">
+          <span class="dice-icon">✨</span>
+          <span class="dice-label">ASP</span>
+        </button>
+        <button class="dice-btn stat-btn" (click)="showWoundsMod = !showWoundsMod">
+          <span class="dice-icon">💔</span>
+          <span class="dice-label">Wounds</span>
+        </button>
+        <button class="dice-btn stat-btn" (click)="showBeMod = !showBeMod" [disabled]="!myCharacter.wearingArmour">
+          <span class="dice-icon">🛡️</span>
+          <span class="dice-label">BE</span>
+        </button>
+        <button class="dice-btn stat-btn" (click)="performRest()">
+          <span class="dice-icon">🛌</span>
+          <span class="dice-label">Rest</span>
+        </button>
+      </div>
+
+      <!-- Life Modification Panel -->
+      <div *ngIf="showLifeMod && myCharacter" class="stat-mod-panel">
+        <label>Modify Life (Current: {{ myCharacter.currentLife ?? 0 }})</label>
+        <div class="stat-mod-controls">
+          <input 
+            type="number" 
+            [(ngModel)]="lifeModValue" 
+            placeholder="Change"
+            class="stat-input">
+          <button class="dice-btn" (click)="modifyLife()">Apply</button>
+          <button class="dice-btn" (click)="showLifeMod = false; lifeModValue = 0">Cancel</button>
+        </div>
+      </div>
+
+      <!-- ASP Modification Panel -->
+      <div *ngIf="showAspMod && myCharacter" class="stat-mod-panel">
+        <label>Modify ASP (Current: {{ myCharacter.currentAsp ?? 0 }})</label>
+        <div class="stat-mod-controls">
+          <input 
+            type="number" 
+            [(ngModel)]="aspModValue" 
+            placeholder="Change"
+            class="stat-input">
+          <button class="dice-btn" (click)="modifyAsp()">Apply</button>
+          <button class="dice-btn" (click)="showAspMod = false; aspModValue = 0">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Wounds Modification Panel -->
+      <div *ngIf="showWoundsMod && myCharacter" class="stat-mod-panel">
+        <label>Modify Wounds (Current: {{ myCharacter.wounds ?? 0 }})</label>
+        <div class="stat-mod-controls">
+          <input 
+            type="number" 
+            [(ngModel)]="woundsModValue" 
+            placeholder="Change"
+            class="stat-input">
+          <button class="dice-btn" (click)="modifyWounds()">Apply</button>
+          <button class="dice-btn" (click)="showWoundsMod = false; woundsModValue = 0">Cancel</button>
+        </div>
+      </div>
+
+      <!-- BE Modification Panel -->
+      <div *ngIf="showBeMod && myCharacter && myCharacter.wearingArmour" class="stat-mod-panel">
+        <label>Modify BE (Current: {{ myCharacter.armourBe ?? 0 }})</label>
+        <div class="stat-mod-controls">
+          <input 
+            type="number" 
+            [(ngModel)]="beModValue" 
+            placeholder="Change"
+            class="stat-input">
+          <button class="dice-btn" (click)="modifyBe()">Apply</button>
+          <button class="dice-btn" (click)="showBeMod = false; beModValue = 0">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+

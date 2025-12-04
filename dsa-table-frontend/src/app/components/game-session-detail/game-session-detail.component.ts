@@ -1,0 +1,705 @@
+import { Component, OnInit, ViewChild, AfterViewInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { GameSessionService } from '../../services/game-session.service';
+import { CharacterService } from '../../services/character.service';
+import { ChatService } from '../../services/chat.service';
+import { AuthService } from '../../services/auth.service';
+import { GameSession } from '../../models/game-session.model';
+import { Character } from '../../models/character.model';
+import { ChatComponent } from '../chat/chat.component';
+import { environment } from '../../../environments/environment';
+
+@Component({
+  selector: 'app-game-session-detail',
+  standalone: true,
+  imports: [CommonModule, RouterLink, ChatComponent, FormsModule],
+  templateUrl: './game-session-detail.component.html',
+  styleUrl: './game-session-detail.component.scss'
+})
+export class GameSessionDetailComponent implements OnInit, AfterViewInit {
+  @ViewChild('chatComponent') chatComponent!: ChatComponent;
+  
+  session: GameSession | null = null;
+  characters: Character[] = [];
+  loading = false;
+  error: string | null = null;
+  sessionId: number | null = null;
+  currentUserId: number | null = null;
+  showCustomRoll = false;
+  customDiceSides = 20;
+  
+  // Character selection for joining session
+  showCharacterSelection = false;
+  availableCharacters: Character[] = [];
+  selectedCharacterId: number | null = null;
+  joiningSession = false;
+  myCharacter: Character | null = null;
+  
+  // Talent rolling
+  selectedTalentId: number | null = null;
+  talentSearchTerm: string = '';
+  showTalentDropdown: boolean = false;
+  highlightedTalentIndex: number = -1;
+
+  // Character stat modifications
+  showLifeMod: boolean = false;
+  showAspMod: boolean = false;
+  showWoundsMod: boolean = false;
+  showBeMod: boolean = false;
+  showRest: boolean = false;
+  lifeModValue: number = 0;
+  aspModValue: number = 0;
+  woundsModValue: number = 0;
+  beModValue: number = 0;
+
+  constructor(
+    private route: ActivatedRoute,
+    private router: Router,
+    private gameSessionService: GameSessionService,
+    private characterService: CharacterService,
+    private chatService: ChatService,
+    private authService: AuthService
+  ) {}
+
+  ngOnInit(): void {
+    const currentUser = this.authService.getCurrentUser();
+    if (currentUser?.id) {
+      this.currentUserId = currentUser.id;
+    }
+
+    this.route.params.subscribe(params => {
+      this.sessionId = +params['id'];
+      if (this.sessionId) {
+        this.loadSession();
+        this.loadCharacters();
+      }
+    });
+  }
+
+  ngAfterViewInit(): void {
+    // ViewChild is now available
+  }
+
+  loadSession(): void {
+    if (!this.sessionId) return;
+
+    this.loading = true;
+    this.error = null;
+
+    this.gameSessionService.getSessionById(this.sessionId).subscribe({
+      next: (data: GameSession) => {
+        this.session = data;
+        this.loading = false;
+        // Check if user needs to join after session is loaded
+        this.checkIfJoined();
+      },
+      error: (err: any) => {
+        this.error = 'Failed to load game session.';
+        this.loading = false;
+        console.error('Error loading game session:', err);
+      }
+    });
+  }
+
+  loadCharacters(): void {
+    if (!this.sessionId) return;
+
+    this.characterService.getAllCharacters(undefined, this.sessionId).subscribe({
+      next: (data: Character[]) => {
+        // Sort by initiative (descending), then by name
+        this.characters = data.sort((a, b) => {
+          const initA = a.initiative ?? 0;
+          const initB = b.initiative ?? 0;
+          if (initA !== initB) {
+            return initB - initA; // Higher initiative first
+          }
+          return (a.name || '').localeCompare(b.name || '');
+        });
+      },
+      error: (err: any) => {
+        console.error('Error loading characters:', err);
+      }
+    });
+  }
+
+  isGameMaster(): boolean {
+    return this.session?.gameMaster?.id === this.currentUserId;
+  }
+
+  deleteSession(): void {
+    if (!this.sessionId) return;
+    
+    if (confirm('Are you sure you want to delete this game session?')) {
+      this.gameSessionService.deleteSession(this.sessionId).subscribe({
+        next: () => {
+          this.router.navigate(['/sessions']);
+        },
+        error: (err: any) => {
+          alert('Failed to delete game session.');
+          console.error('Error deleting game session:', err);
+        }
+      });
+    }
+  }
+
+  editSession(): void {
+    if (this.sessionId) {
+      this.router.navigate(['/sessions', this.sessionId, 'edit']);
+    }
+  }
+
+  formatDate(dateString: string | undefined): string {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  rollDice(sides: number): void {
+    if (!this.sessionId || !this.chatComponent) return;
+    
+    // Calculate result immediately
+    const result = Math.floor(Math.random() * sides) + 1;
+    const message = `🎲 Rolled d${sides}: ${result}`;
+    
+    // Send message directly through chat component for immediate display
+    this.chatComponent.sendMessage(message);
+  }
+
+  rollCustomDice(): void {
+    if (this.customDiceSides >= 2 && this.customDiceSides <= 1000) {
+      this.rollDice(this.customDiceSides);
+      this.showCustomRoll = false;
+    }
+  }
+
+  checkIfJoined(): void {
+    if (!this.sessionId || !this.currentUserId) return;
+
+    const isGM = this.session?.gameMaster?.id === this.currentUserId;
+    
+    // Check if user has a character in this session (GMs might also have characters)
+    this.gameSessionService.getMyCharacter(this.sessionId).subscribe({
+      next: (character: Character | null) => {
+        if (character) {
+          this.myCharacter = character;
+          this.showCharacterSelection = false;
+          // Load full character data with properties and talents
+          if (character.id) {
+            this.loadFullCharacter(character.id);
+          }
+        } else if (!isGM) {
+          // Non-GM users need to join, show character selection
+          this.loadAvailableCharacters();
+          this.showCharacterSelection = true;
+        }
+        // GMs without characters in session don't need to join
+      },
+      error: (err: any) => {
+        // If error and not GM, assume user hasn't joined
+        if (!isGM) {
+          this.loadAvailableCharacters();
+          this.showCharacterSelection = true;
+        }
+      }
+    });
+  }
+
+  loadAvailableCharacters(): void {
+    if (!this.currentUserId) return;
+
+    this.characterService.getAllCharacters(this.currentUserId).subscribe({
+      next: (data: Character[]) => {
+        this.availableCharacters = data;
+        if (data.length > 0) {
+          this.selectedCharacterId = data[0].id || null;
+        }
+      },
+      error: (err: any) => {
+        console.error('Error loading available characters:', err);
+      }
+    });
+  }
+
+  joinSession(): void {
+    if (!this.sessionId || !this.selectedCharacterId || this.joiningSession) return;
+
+    this.joiningSession = true;
+    this.gameSessionService.joinSession(this.sessionId, this.selectedCharacterId).subscribe({
+      next: (session: GameSession) => {
+        this.session = session;
+        this.showCharacterSelection = false;
+        this.joiningSession = false;
+        // Reload characters to show the newly joined one
+        this.loadCharacters();
+        // Reload session to update players list
+        this.loadSession();
+        // Reload my character with full data
+        this.checkIfJoined();
+      },
+      error: (err: any) => {
+        this.error = 'Failed to join session.';
+        this.joiningSession = false;
+        console.error('Error joining session:', err);
+      }
+    });
+  }
+
+  loadFullCharacter(characterId: number): void {
+    this.characterService.getCharacterById(characterId).subscribe({
+      next: (character: Character) => {
+        this.myCharacter = character;
+      },
+      error: (err: any) => {
+        console.error('Error loading full character:', err);
+      }
+    });
+  }
+
+  onTalentSelectionChange(value: number | null): void {
+    this.showTalentDropdown = false;
+    this.talentSearchTerm = '';
+  }
+
+  getFilteredTalents(): any[] {
+    if (!this.myCharacter?.talents) return [];
+    if (!this.talentSearchTerm.trim()) {
+      return this.myCharacter.talents.filter(t => t.id !== undefined && t.id !== null);
+    }
+    const searchLower = this.talentSearchTerm.toLowerCase();
+    return this.myCharacter.talents.filter(t => 
+      t.id !== undefined && 
+      t.id !== null &&
+      (t.name.toLowerCase().includes(searchLower) || 
+       (t.check && t.check.toLowerCase().includes(searchLower)))
+    );
+  }
+
+  selectTalent(talentId: number): void {
+    this.selectedTalentId = talentId;
+    this.showTalentDropdown = false;
+    this.talentSearchTerm = '';
+  }
+
+  getSelectedTalentName(): string {
+    if (!this.selectedTalentId || !this.myCharacter?.talents) return 'Select a talent...';
+    const talent = this.myCharacter.talents.find(t => t.id === this.selectedTalentId);
+    if (!talent) return 'Select a talent...';
+    return `${talent.name} (${talent.check}) - ${talent.value}`;
+  }
+
+  onTalentInputBlur(): void {
+    // Delay closing dropdown to allow click events on options to fire
+    setTimeout(() => {
+      this.showTalentDropdown = false;
+      this.highlightedTalentIndex = -1;
+    }, 200);
+  }
+
+  onTalentInputKeyDown(event: KeyboardEvent): void {
+    const filteredTalents = this.getFilteredTalents();
+    
+    // Handle Enter key: roll if talent selected, or select from dropdown if open
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (this.showTalentDropdown && filteredTalents.length > 0) {
+        // Dropdown is open: select highlighted talent
+        if (this.highlightedTalentIndex >= 0 && this.highlightedTalentIndex < filteredTalents.length) {
+          this.selectTalent(filteredTalents[this.highlightedTalentIndex].id!);
+        } else if (filteredTalents.length === 1) {
+          // Only one result: select it
+          this.selectTalent(filteredTalents[0].id!);
+        }
+      } else if (this.selectedTalentId) {
+        // Talent is selected and dropdown is closed: perform roll
+        this.rollTalentCheck();
+      }
+      return;
+    }
+    
+    if (!this.showTalentDropdown || filteredTalents.length === 0) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        this.showTalentDropdown = true;
+        this.highlightedTalentIndex = event.key === 'ArrowDown' ? 0 : filteredTalents.length - 1;
+        event.preventDefault();
+      }
+      return;
+    }
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        this.highlightedTalentIndex = (this.highlightedTalentIndex + 1) % filteredTalents.length;
+        this.scrollToHighlightedTalent();
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.highlightedTalentIndex = this.highlightedTalentIndex <= 0 
+          ? filteredTalents.length - 1 
+          : this.highlightedTalentIndex - 1;
+        this.scrollToHighlightedTalent();
+        break;
+      case 'Escape':
+        event.preventDefault();
+        this.showTalentDropdown = false;
+        this.highlightedTalentIndex = -1;
+        break;
+    }
+  }
+
+  scrollToHighlightedTalent(): void {
+    // Scroll the highlighted option into view
+    setTimeout(() => {
+      const dropdown = document.querySelector('.talent-dropdown');
+      const highlighted = dropdown?.querySelector('.talent-option.highlighted') as HTMLElement;
+      if (highlighted && dropdown) {
+        highlighted.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }, 0);
+  }
+
+  isTalentHighlighted(index: number): boolean {
+    return this.highlightedTalentIndex === index;
+  }
+
+  rollTalentCheck(mod: number = 0): void {
+    // Same check as regular dice roll
+    if (!this.sessionId || !this.chatComponent) {
+      console.error('Missing requirements:', { sessionId: this.sessionId, chatComponent: !!this.chatComponent });
+      return;
+    }
+
+    if (!this.myCharacter) {
+      console.error('No character loaded');
+      return;
+    }
+
+    // Validate selectedTalentId
+    if (!this.selectedTalentId || isNaN(Number(this.selectedTalentId))) {
+      console.error('No valid talent selected:', this.selectedTalentId);
+      return;
+    }
+
+    // Ensure selectedTalentId is a number
+    const talentId = Number(this.selectedTalentId);
+    if (isNaN(talentId)) {
+      console.error('Invalid talent ID:', this.selectedTalentId);
+      return;
+    }
+    
+    // Try multiple comparison methods to handle type mismatches
+    const talent = this.myCharacter.talents?.find(t => {
+      return t.id === talentId || 
+             Number(t.id) === talentId || 
+             t.id === Number(talentId) ||
+             String(t.id) === String(talentId);
+    });
+    
+    if (!talent) {
+      const errorMsg = `❌ Talent not found (ID: ${this.selectedTalentId})`;
+      console.error('Talent not found');
+      this.chatComponent.sendMessage(errorMsg);
+      this.selectedTalentId = null;
+      return;
+    }
+
+    // Parse check string (format: "MU/IN/GE" or "(MU/IN/GE)")
+    const checkStr = talent.check || '';
+    const cleanCheck = checkStr.replace(/[()]/g, '').trim();
+    const properties = cleanCheck.split('/').map(p => p.trim());
+
+
+    if (properties.length !== 3) {
+      const message = `❌ Invalid talent check format: ${talent.check} (expected 3 properties, got ${properties.length})`;
+      console.error('Invalid check format:', message);
+      this.chatComponent.sendMessage(message);
+      this.selectedTalentId = null;
+      return;
+    }
+
+    if (!this.myCharacter.properties || this.myCharacter.properties.length === 0) {
+      const message = `❌ Character properties not loaded`;
+      console.error('Character properties not loaded');
+      this.chatComponent.sendMessage(message);
+      this.selectedTalentId = null;
+      return;
+    }
+
+    // Map property abbreviations to property names
+    const propertyMap: { [key: string]: string[] } = {
+      'MU': ['Mut', 'Courage', 'MU'],
+      'KL': ['Klugheit', 'Wisdom', 'KL'],
+      'IN': ['Intuition', 'IN'],
+      'CH': ['Charisma', 'CH'],
+      'FF': ['Fingerfertigkeit', 'Dexterity', 'FF'],
+      'GE': ['Gewandtheit', 'Agility', 'GE'],
+      'KO': ['Konstitution', 'Constitution', 'KO'],
+      'KK': ['Körperkraft', 'Strength', 'KK'],
+      'MR': ['Magieresistenz', 'Magic Resistance', 'MR'],
+      'LEP': ['Lebensenergie', 'Life', 'LEP'],
+      'AUP': ['Ausdauer', 'Endurance', 'AUP'],
+      'ASP': ['Astralenergie', 'Magic Energy', 'ASP'],
+      'KE': ['Karmaenergie', 'Karma', 'KE'],
+      'SO': ['Sozialstatus', 'Social Standing', 'SO']
+    };
+
+    // Get property values by abbreviation
+    const getPropertyValue = (abbr: string): number => {
+      const abbrUpper = abbr.toUpperCase().trim();
+      const possibleNames = propertyMap[abbrUpper] || [abbrUpper];
+      
+      const prop = this.myCharacter!.properties!.find(p => {
+        const propName = p.name.toUpperCase();
+        return possibleNames.some(name => 
+          propName === name.toUpperCase() || 
+          propName.startsWith(name.toUpperCase()) ||
+          propName.includes(name.toUpperCase())
+        );
+      });
+      return prop?.value || 0;
+    };
+
+    // Apply modifiers according to Java logic:
+    // mod += hero.getWounds()*2;
+    // (Armor BE would be added here if applicable, but talents don't have BE)
+    let accumulatedMod = mod; // Start with the mod parameter
+    accumulatedMod += (this.myCharacter.wounds || 0) * 2;
+    
+    // Calculate totalMod = abilityValue - mod
+    const totalMod = talent.value - accumulatedMod;
+    
+    // result = Math.max(totalMod, 0) - this is the INITIAL result
+    let result = Math.max(totalMod, 0);
+    
+    // diff = totalMod < 0 ? -totalMod : 0
+    const diff = totalMod < 0 ? -totalMod : 0;
+
+    // Roll dice for each property (3 dice for talents)
+    const roll1 = Math.floor(Math.random() * 20) + 1;
+    const roll2 = Math.floor(Math.random() * 20) + 1;
+    const roll3 = Math.floor(Math.random() * 20) + 1;
+
+    const prop1Value = getPropertyValue(properties[0]);
+    const prop2Value = getPropertyValue(properties[1]);
+    const prop3Value = getPropertyValue(properties[2]);
+
+    // Calculate result based on DSA logic
+    // For each die: r = prop.getValue() - diff - diceRoll
+    // result += Math.min(r, 0)
+    const r1 = prop1Value - diff - roll1;
+    const r2 = prop2Value - diff - roll2;
+    const r3 = prop3Value - diff - roll3;
+    
+    result += Math.min(r1, 0);
+    result += Math.min(r2, 0);
+    result += Math.min(r3, 0);
+
+    // Cap result at ability value
+    if (result > talent.value) {
+      result = talent.value;
+    }
+    
+    const finalResult = result;
+
+    // Format message similar to Java code
+    // Format: "HeroName 🎲 TalentName (roll1|roll2|roll3) = result"
+    const characterName = this.myCharacter.name;
+    const talentName = talent.name;
+    // Show modifier in message if non-zero
+    const modStr = accumulatedMod !== 0 ? (accumulatedMod < 0 ? `${accumulatedMod}` : `+${accumulatedMod}`) : '';
+    
+    const message = `${characterName} 🎲 ${talentName} (${roll1}|${roll2}|${roll3})${modStr ? modStr : ''} = ${finalResult}`;
+
+    // Use the same approach as regular dice rolls - send via chat component
+    if (!this.chatComponent) {
+      if (this.sessionId) {
+        // Fallback to chat service if component not available
+        this.chatService.sendMessage(this.sessionId, message).subscribe({
+          error: (err: any) => console.error('Error sending message:', err)
+        });
+      }
+    } else {
+      try {
+        this.chatComponent.sendMessage(message);
+      } catch (error) {
+        console.error('Error in sendMessage:', error);
+      }
+    }
+    
+    this.selectedTalentId = null;
+  }
+
+  modifyLife(): void {
+    if (!this.myCharacter || !this.myCharacter.id) return;
+    
+    const newValue = (this.myCharacter.currentLife || 0) + this.lifeModValue;
+    const updatedCharacter = { ...this.myCharacter, currentLife: Math.max(0, newValue) };
+    
+    this.characterService.updateCharacter(this.myCharacter.id, updatedCharacter).subscribe({
+      next: (character: Character) => {
+        this.myCharacter = character;
+        const message = `${character.name} ${this.lifeModValue >= 0 ? '+' : ''}${this.lifeModValue} Life = ${character.currentLife}`;
+        if (this.chatComponent) {
+          this.chatComponent.sendMessage(message);
+        }
+        this.showLifeMod = false;
+        this.lifeModValue = 0;
+        // Reload characters to update the list
+        this.loadCharacters();
+      },
+      error: (err: any) => {
+        console.error('Error updating life:', err);
+      }
+    });
+  }
+
+  modifyAsp(): void {
+    if (!this.myCharacter || !this.myCharacter.id) return;
+    
+    const newValue = (this.myCharacter.currentAsp || 0) + this.aspModValue;
+    const updatedCharacter = { ...this.myCharacter, currentAsp: Math.max(0, newValue) };
+    
+    this.characterService.updateCharacter(this.myCharacter.id, updatedCharacter).subscribe({
+      next: (character: Character) => {
+        this.myCharacter = character;
+        const message = `${character.name} ${this.aspModValue >= 0 ? '+' : ''}${this.aspModValue} ASP = ${character.currentAsp}`;
+        if (this.chatComponent) {
+          this.chatComponent.sendMessage(message);
+        }
+        this.showAspMod = false;
+        this.aspModValue = 0;
+        // Reload characters to update the list
+        this.loadCharacters();
+      },
+      error: (err: any) => {
+        console.error('Error updating ASP:', err);
+      }
+    });
+  }
+
+  modifyWounds(): void {
+    if (!this.myCharacter || !this.myCharacter.id) return;
+    
+    const newValue = (this.myCharacter.wounds || 0) + this.woundsModValue;
+    const updatedCharacter = { ...this.myCharacter, wounds: Math.max(0, newValue) };
+    
+    this.characterService.updateCharacter(this.myCharacter.id, updatedCharacter).subscribe({
+      next: (character: Character) => {
+        this.myCharacter = character;
+        const message = `${character.name} ${this.woundsModValue >= 0 ? '+' : ''}${this.woundsModValue} Wounds = ${character.wounds}`;
+        if (this.chatComponent) {
+          this.chatComponent.sendMessage(message);
+        }
+        this.showWoundsMod = false;
+        this.woundsModValue = 0;
+        // Reload characters to update the list
+        this.loadCharacters();
+      },
+      error: (err: any) => {
+        console.error('Error updating wounds:', err);
+      }
+    });
+  }
+
+  modifyBe(): void {
+    if (!this.myCharacter || !this.myCharacter.id || !this.myCharacter.wearingArmour) return;
+    
+    const newValue = (this.myCharacter.armourBe || 0) + this.beModValue;
+    const updatedCharacter = { ...this.myCharacter, armourBe: Math.max(0, newValue) };
+    
+    this.characterService.updateCharacter(this.myCharacter.id, updatedCharacter).subscribe({
+      next: (character: Character) => {
+        this.myCharacter = character;
+        const message = `${character.name} ${this.beModValue >= 0 ? '+' : ''}${this.beModValue} BE = ${character.armourBe}`;
+        if (this.chatComponent) {
+          this.chatComponent.sendMessage(message);
+        }
+        this.showBeMod = false;
+        this.beModValue = 0;
+        // Reload characters to update the list
+        this.loadCharacters();
+      },
+      error: (err: any) => {
+        console.error('Error updating BE:', err);
+      }
+    });
+  }
+
+  performRest(): void {
+    if (!this.myCharacter || !this.myCharacter.id) return;
+    
+    // Rest typically restores some life and ASP
+    // For now, we'll restore 1 Life and 1 ASP per rest
+    const newLife = Math.min((this.myCharacter.currentLife || 0) + 1, this.getMaxLife());
+    const newAsp = Math.min((this.myCharacter.currentAsp || 0) + 1, this.getMaxAsp());
+    const updatedCharacter = { 
+      ...this.myCharacter, 
+      currentLife: newLife,
+      currentAsp: newAsp
+    };
+    
+    this.characterService.updateCharacter(this.myCharacter.id, updatedCharacter).subscribe({
+      next: (character: Character) => {
+        this.myCharacter = character;
+        const message = `${character.name} 🛌 Rest: +1 Life (${character.currentLife}), +1 ASP (${character.currentAsp})`;
+        if (this.chatComponent) {
+          this.chatComponent.sendMessage(message);
+        }
+        // Reload characters to update the list
+        this.loadCharacters();
+      },
+      error: (err: any) => {
+        console.error('Error performing rest:', err);
+      }
+    });
+  }
+
+  getMaxLife(): number {
+    // Get max life from properties (LEP - Lebensenergie)
+    if (!this.myCharacter?.properties) return 999;
+    const lep = this.myCharacter.properties.find(p => 
+      p.name.toUpperCase().includes('LEP') || 
+      p.name.toUpperCase().includes('LEBENSENERGIE') ||
+      p.name.toUpperCase().includes('LIFE')
+    );
+    return lep?.value || 999;
+  }
+
+  getMaxAsp(): number {
+    // Get max ASP from properties (ASP - Astralenergie)
+    if (!this.myCharacter?.properties) return 999;
+    const asp = this.myCharacter.properties.find(p => 
+      p.name.toUpperCase().includes('ASP') || 
+      p.name.toUpperCase().includes('ASTRALENERGIE') ||
+      p.name.toUpperCase().includes('MAGIC')
+    );
+    return asp?.value || 999;
+  }
+
+  getAvatarUrl(character: Character): string {
+    if (character.avatarUrl && character.avatarUrl.trim() !== '') {
+      // If it's a relative URL, prepend the API base URL
+      if (character.avatarUrl.startsWith('/')) {
+        return `${environment.apiUrl.replace('/api', '')}${character.avatarUrl}`;
+      }
+      return character.avatarUrl;
+    }
+    return `${environment.apiUrl.replace('/api', '')}/api/char`;
+  }
+
+  getLifePercentage(character: Character): number {
+    if (!character.totalLife || character.totalLife === 0) {
+      return 100;
+    }
+    const current = character.currentLife ?? 0;
+    return Math.max(0, Math.min(100, (current / character.totalLife) * 100));
+  }
+}
+

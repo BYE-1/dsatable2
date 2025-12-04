@@ -1,0 +1,55 @@
+<div class="chat-container">
+  <div 
+    #messagesContainer 
+    class="messages-container"
+    *ngIf="!loading">
+    <div *ngIf="error" class="error-message">
+      {{ error }}
+    </div>
+
+    <div *ngFor="let message of messages; let i = index" class="message-wrapper">
+      <div *ngIf="shouldShowDateSeparator(i)" class="date-separator">
+        {{ formatDate(message.createdAt) }}
+      </div>
+      
+      <div 
+        class="message" 
+        [class.own-message]="isOwnMessage(message)">
+        <div class="message-header">
+          <span class="author-name">{{ message.author.displayName || 'Unknown' }}</span>
+          <span class="message-time">{{ formatTime(message.createdAt) }}</span>
+        </div>
+        <div class="message-content">{{ message.message }}</div>
+      </div>
+    </div>
+
+    <div *ngIf="messages.length === 0" class="empty-state">
+      <p>No messages yet. Start the conversation!</p>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="loading">
+    Loading messages...
+  </div>
+
+  <div class="chat-input-container">
+    <textarea
+      #messageInput
+      [(ngModel)]="newMessage"
+      (keydown)="onKeyPress($event)"
+      placeholder="Type a message... (Press Enter to send)"
+      class="message-input"
+      [disabled]="sending"
+      rows="1"
+      maxlength="2000">
+    </textarea>
+    <button 
+      (click)="sendMessage()" 
+      [disabled]="!newMessage.trim() || sending"
+      class="send-button">
+      <span *ngIf="!sending">Send</span>
+      <span *ngIf="sending">Sending...</span>
+    </button>
+  </div>
+</div>
+

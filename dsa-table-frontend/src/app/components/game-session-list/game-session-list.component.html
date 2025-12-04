@@ -1,0 +1,83 @@
+<div class="session-list-container">
+  <div class="header-section">
+    <h1>Game Sessions</h1>
+    <button class="btn btn-primary" (click)="navigateToCreate()">Create New Session</button>
+  </div>
+
+  <div class="filter-section">
+    <button 
+      class="filter-btn" 
+      [class.active]="filterMode === 'all'"
+      (click)="onFilterChange('all')">
+      All Sessions
+    </button>
+    <button 
+      class="filter-btn" 
+      [class.active]="filterMode === 'gm'"
+      (click)="onFilterChange('gm')">
+      My Sessions (GM)
+    </button>
+    <button 
+      class="filter-btn" 
+      [class.active]="filterMode === 'player'"
+      (click)="onFilterChange('player')">
+      Joined Sessions
+    </button>
+  </div>
+
+  <div *ngIf="loading" class="loading">Loading game sessions...</div>
+  
+  <div *ngIf="error" class="error-message">
+    {{ error }}
+  </div>
+
+  <div *ngIf="!loading && !error" class="sessions-grid">
+    <div 
+      *ngFor="let session of sessions" 
+      class="session-card"
+      (click)="navigateToSession(session.id!)">
+      <div class="session-header">
+        <h3>{{ session.title }}</h3>
+        <div class="session-badges">
+          <span *ngIf="isGameMaster(session)" class="badge badge-gm">GM</span>
+        </div>
+      </div>
+      
+      <p class="session-description" *ngIf="session.description">
+        {{ session.description }}
+      </p>
+      
+      <div class="session-info">
+        <div class="info-item">
+          <strong>Game Master:</strong> {{ session.gameMaster?.displayName || 'Unknown' }}
+        </div>
+        <div class="info-item" *ngIf="session.characters && session.characters.length > 0">
+          <strong>Characters:</strong> {{ session.characters.length }}
+        </div>
+        <div class="info-item" *ngIf="session.createdAt">
+          <strong>Created:</strong> {{ formatDate(session.createdAt) }}
+        </div>
+      </div>
+
+      <div class="session-actions" (click)="$event.stopPropagation()">
+        <button 
+          class="btn btn-secondary"
+          (click)="navigateToSession(session.id!)">
+          View Details
+        </button>
+        <button 
+          *ngIf="isGameMaster(session)"
+          class="btn btn-danger"
+          (click)="deleteSession(session.id!, $event)">
+          Delete
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="sessions.length === 0" class="empty-state">
+      <p>No game sessions found.</p>
+      <button class="btn btn-primary" (click)="navigateToCreate()">Create Your First Session</button>
+    </div>
+  </div>
+</div>
+
