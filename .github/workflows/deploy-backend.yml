@@ -41,9 +41,9 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
-          source: "dsa-table-backend/deploy/*"
+          source: "dsa-table-backend/deploy/dsa-table-backend.jar"
           target: "/tmp/dsa-table-backend-deploy"
-          strip_components: 1
+          rm: true
 
       - name: Execute deployment script on server
         uses: appleboy/ssh-action@v1.0.3
@@ -53,6 +53,8 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
+            set -e
+            
             # Function to run command with sudo if needed
             run_cmd() {
               if sudo -n true 2>/dev/null; then
@@ -62,22 +64,57 @@ jobs:
               fi
             }
             
+            DEPLOY_USER="${{ secrets.SERVER_USER }}"
+            DEPLOY_DIR="/tmp/dsa-table-backend-deploy"
+            APP_DIR="/opt/dsa-table-backend"
+            JAR_FILE="$DEPLOY_DIR/dsa-table-backend.jar"
+            
+            # Verify JAR file exists
+            if [ ! -f "$JAR_FILE" ]; then
+              echo "Error: JAR file not found at $JAR_FILE"
+              echo "Checking deploy directory contents:"
+              ls -la "$DEPLOY_DIR" || echo "Deploy directory does not exist"
+              echo "Searching for JAR files in /tmp:"
+              find /tmp -name "*.jar" -type f 2>/dev/null || echo "No JAR files found"
+              exit 1
+            fi
+            
+            echo "Found JAR file: $JAR_FILE ($(du -h $JAR_FILE | cut -f1))"
+            
             # Create application directory if it doesn't exist
-            run_cmd mkdir -p /opt/dsa-table-backend
+            run_cmd mkdir -p "$APP_DIR"
             
             # Set ownership if using sudo
             if sudo -n true 2>/dev/null; then
-              sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} /opt/dsa-table-backend 2>/dev/null || true
+              sudo chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR" 2>/dev/null || true
             fi
             
             # Backup existing JAR if it exists
-            if [ -f /opt/dsa-table-backend/dsa-table-backend.jar ]; then
-              run_cmd cp /opt/dsa-table-backend/dsa-table-backend.jar /opt/dsa-table-backend/dsa-table-backend.jar.backup.$(date +%Y%m%d_%H%M%S)
+            if [ -f "$APP_DIR/dsa-table-backend.jar" ]; then
+              BACKUP_NAME="dsa-table-backend.jar.backup.$(date +%Y%m%d_%H%M%S)"
+              run_cmd cp "$APP_DIR/dsa-table-backend.jar" "$APP_DIR/$BACKUP_NAME"
+              echo "Backed up existing JAR to $BACKUP_NAME"
             fi
             
             # Copy new JAR
-            run_cmd cp /tmp/dsa-table-backend-deploy/dsa-table-backend.jar /opt/dsa-table-backend/
-            run_cmd chown ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} /opt/dsa-table-backend/dsa-table-backend.jar
+            run_cmd cp "$JAR_FILE" "$APP_DIR/dsa-table-backend.jar"
+            echo "Copied JAR to $APP_DIR/dsa-table-backend.jar"
+            
+            # Set ownership (only if sudo is available)
+            if sudo -n true 2>/dev/null; then
+              sudo chown "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR/dsa-table-backend.jar" || true
+            else
+              # Try without sudo if user owns the directory
+              chown "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR/dsa-table-backend.jar" 2>/dev/null || true
+            fi
+            
+            # Verify file was copied
+            if [ ! -f "$APP_DIR/dsa-table-backend.jar" ]; then
+              echo "Error: JAR file was not copied successfully"
+              exit 1
+            fi
+            
+            echo "JAR file deployed successfully: $(ls -lh $APP_DIR/dsa-table-backend.jar)"
             
             # Restart service (requires sudo)
             if sudo -n true 2>/dev/null; then
@@ -87,7 +124,7 @@ jobs:
             fi
             
             # Cleanup
-            rm -rf /tmp/dsa-table-backend-deploy
+            rm -rf "$DEPLOY_DIR"
 
       - name: Verify deployment
         uses: appleboy/ssh-action@v1.0.3
