@@ -51,7 +51,8 @@ public class CharacterImageController {
     public static final String WEAPON_SWORD = "sword";
     public static final String WEAPON_AXE = "axe";
     public static final String WEAPON_BOW = "bow";
-    public static final String[] WEAPON_OPTIONS = {WEAPON_NONE, WEAPON_SWORD, WEAPON_AXE, WEAPON_BOW};
+    public static final String WEAPON_MAGE_STAFF = "mage_staff";
+    public static final String[] WEAPON_OPTIONS = {WEAPON_NONE, WEAPON_SWORD, WEAPON_AXE, WEAPON_BOW, WEAPON_MAGE_STAFF};
 
     public static final String HAIR_COLOUR_DEFAULT = "#f3bf00";
     public static final String CLOTH_COLOUR_DEFAULT = "#00cc00";
@@ -100,6 +101,10 @@ public class CharacterImageController {
         if (equip == null) {
             equip = new String[0];
         }
+        // Filter out empty strings from equip array
+        equip = Arrays.stream(equip)
+                .filter(e -> e != null && !e.trim().isEmpty())
+                .toArray(String[]::new);
 
         StringBuilder builder = new StringBuilder();
 
@@ -211,6 +216,7 @@ public class CharacterImageController {
             case WEAPON_BOW:
                 return SVGUtil.getSvg(SVGUtil.WEAPON_BOW, Color.BLACK);
             case WEAPON_AXE:
+            case WEAPON_MAGE_STAFF:
             default:
                 return "";
         }
@@ -220,6 +226,8 @@ public class CharacterImageController {
         switch (weapon) {
             case WEAPON_AXE:
                 return SVGUtil.getSvg(SVGUtil.WEAPON_AXE, Color.BLACK);
+            case WEAPON_MAGE_STAFF:
+                return SVGUtil.getSvg(SVGUtil.WEAPON_MAGE, Color.BLACK);
             case WEAPON_SWORD:
             case WEAPON_BOW:
             default:

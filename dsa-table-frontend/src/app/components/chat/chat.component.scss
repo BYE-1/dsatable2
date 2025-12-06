@@ -4,16 +4,12 @@
   height: 100%;
   min-height: 0;
   max-height: 100%;
-  background: #fefcf8;
-  background-image: 
-    linear-gradient(90deg, transparent 79px, rgba(139, 117, 80, 0.08) 81px, rgba(139, 117, 80, 0.08) 82px, transparent 84px),
-    linear-gradient(#fefcf8 0.1em, transparent 0.1em);
-  background-size: 100% 1.5em;
+  background: #ffffff;
   border-radius: 12px;
   box-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.08),
-    inset 0 0 0 1px rgba(139, 117, 80, 0.15);
-  border: 1px solid rgba(212, 196, 168, 0.4);
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 4px 16px rgba(107, 159, 61, 0.08);
+  border: 2px solid #d9d0c0;
   overflow: hidden;
   position: relative;
   
@@ -23,8 +19,8 @@
     left: 0;
     top: 0;
     bottom: 0;
-    width: 3px;
-    background: rgba(220, 20, 60, 0.25);
+    width: 4px;
+    background: linear-gradient(180deg, #6b9f3d 0%, #4a7c2a 100%);
     border-radius: 12px 0 0 12px;
     z-index: 1;
   }
@@ -32,15 +28,15 @@
 
 .chat-header {
   padding: 0.5rem 0.75rem;
-  background: rgba(139, 117, 80, 0.08);
-  border-bottom: 1px solid rgba(212, 196, 168, 0.3);
+  background: rgba(107, 159, 61, 0.08);
+  border-bottom: 2px dashed #d9d0c0;
   position: relative;
   z-index: 2;
   flex-shrink: 0;
 
   h3 {
     margin: 0;
-    color: #5a4630;
+    color: #2d5016;
     font-size: 1rem;
     font-family: 'Caveat', cursive;
   }
@@ -210,7 +206,7 @@
   border-top: 1px solid rgba(212, 196, 168, 0.3);
   flex-shrink: 0;
   position: relative;
-  z-index: 10;
+  z-index: 1;
   min-height: 50px;
   visibility: visible;
   opacity: 1;

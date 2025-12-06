@@ -94,6 +94,10 @@ public class SVGUtil {
             "d='M 40,65 49,50 C 62,50 72,42 80,34 73,67 66,79 47,97 48,80 52,72 40,65 Z' id='axeblade'/>" +
             "<path style='fill:#b75f00;fill-opacity:1;stroke:#000000;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1' " +
             "d='M 12,100 44,48 49,50 17,100 Z' id='axehilt'/>";
+    public static final String WEAPON_MAGE = "<path style='fill:#b75f00;fill-opacity:1;stroke:#000000;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1' " +
+            "d='M 9.4208135,100.29801 9.2619375,56.497562 6.2431446,46.714669 12.280732,30.706404 18.000565,46.047686 14.584556,56.719863 14.346218,100.29801 Z' id='staff'/>" +
+            "<path style='fill:#0000bc;fill-opacity:1;stroke:none;stroke-width:0.26458332px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1' " +
+            "d='M 12.255257,39.925854 9.2518329,46.355146 11.925919,52.109546 15.125047,46.247221 Z' id='staff_crystal'/>";
     public static final String WEAPON_BOW = "<path style='fill:#784100;fill-opacity:1;stroke:#000000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1' " +
             "d='M 34.132,108.41 78.715,39.273 C 78.905,71.949 89.411,111.194 35.097,109.165 97.505,102.337 67.981,63.759 78.715,39.084' id='bow'/>";
 

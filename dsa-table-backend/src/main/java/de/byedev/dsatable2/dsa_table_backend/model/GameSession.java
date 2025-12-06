@@ -1,6 +1,5 @@
 package de.byedev.dsatable2.dsa_table_backend.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
@@ -11,7 +10,8 @@ import java.util.Set;
 public class GameSession {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "game_session_seq")
+    @SequenceGenerator(name = "game_session_seq", sequenceName = "game_session_seq", allocationSize = 50)
     private Long id;
 
     @Column(nullable = false, length = 128)
@@ -20,32 +20,26 @@ public class GameSession {
     @Column(length = 1024)
     private String description;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "gm_id")
-    @JsonIgnore
-    private User gameMaster;
+    @Column(name = "gm_id")
+    private Long gameMasterId;
 
-    @ManyToMany
-    @JoinTable(
+    @ElementCollection
+    @CollectionTable(
             name = "session_players",
-            joinColumns = @JoinColumn(name = "session_id"),
-            inverseJoinColumns = @JoinColumn(name = "user_id")
+            joinColumns = @JoinColumn(name = "session_id")
     )
-    @JsonIgnore
-    private Set<User> players = new HashSet<>();
-
-    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<Character> characters = new HashSet<>();
+    @Column(name = "user_id")
+    private Set<Long> playerIds = new HashSet<>();
 
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
     public GameSession() {
     }
 
-    public GameSession(String title, String description, User gameMaster) {
+    public GameSession(String title, String description, Long gameMasterId) {
         this.title = title;
         this.description = description;
-        this.gameMaster = gameMaster;
+        this.gameMasterId = gameMasterId;
     }
 
     public Long getId() {
@@ -68,20 +62,20 @@ public class GameSession {
         this.description = description;
     }
 
-    public User getGameMaster() {
-        return gameMaster;
+    public Long getGameMasterId() {
+        return gameMasterId;
     }
 
-    public void setGameMaster(User gameMaster) {
-        this.gameMaster = gameMaster;
+    public void setGameMasterId(Long gameMasterId) {
+        this.gameMasterId = gameMasterId;
     }
 
-    public Set<User> getPlayers() {
-        return players;
+    public Set<Long> getPlayerIds() {
+        return playerIds;
     }
 
-    public Set<Character> getCharacters() {
-        return characters;
+    public void setPlayerIds(Set<Long> playerIds) {
+        this.playerIds = playerIds;
     }
 
     public OffsetDateTime getCreatedAt() {

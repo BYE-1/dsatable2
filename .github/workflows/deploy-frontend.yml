@@ -1,0 +1,85 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'dsa-table-frontend/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: dsa-table-frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: dsa-table-frontend
+        run: npm ci
+
+      - name: Update production API URL
+        working-directory: dsa-table-frontend
+        run: |
+          # Update environment.prod.ts with production API URL
+          sed -i "s|apiUrl: '.*'|apiUrl: '${{ secrets.PRODUCTION_API_URL || 'http://localhost:8080/api' }}'|g" src/environments/environment.prod.ts
+
+      - name: Build Angular application
+        working-directory: dsa-table-frontend
+        run: npm run build -- --configuration production
+
+      - name: Create deployment archive
+        working-directory: dsa-table-frontend
+        run: |
+          cd dist/dsa-table-frontend
+          tar -czf ../../frontend-deploy.tar.gz .
+
+      - name: Deploy to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          source: "frontend-deploy.tar.gz"
+          target: "/tmp"
+
+      - name: Extract and deploy frontend files
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script: |
+            # Create backup of existing frontend
+            if [ -d ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table ]; then
+              sudo mv ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table.backup.$(date +%Y%m%d_%H%M%S)
+            fi
+            
+            # Create new directory
+            sudo mkdir -p ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table
+            
+            # Extract new files
+            cd /tmp
+            sudo tar -xzf frontend-deploy.tar.gz -C ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table
+            
+            # Set proper permissions
+            sudo chown -R www-data:www-data ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table
+            sudo chmod -R 755 ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table
+            
+            # Cleanup
+            rm -f /tmp/frontend-deploy.tar.gz
+            
+            # Reload Apache
+            sudo systemctl reload apache2
+

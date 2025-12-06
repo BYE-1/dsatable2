@@ -1,8 +1,10 @@
 .app-container {
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
   background: #f4f1e8;
+  overflow: hidden;
 }
 
 header {
@@ -128,7 +130,7 @@ header {
 main {
   flex: 1;
   background: #f4f1e8;
-  padding: 2rem;
+  padding: 0.5rem;
   background-image: 
     repeating-linear-gradient(
       0deg,

@@ -1,12 +1,10 @@
 package de.byedev.dsatable2.dsa_table_backend.web;
 
 import de.byedev.dsatable2.dsa_table_backend.model.Character;
-import de.byedev.dsatable2.dsa_table_backend.model.GameSession;
 import de.byedev.dsatable2.dsa_table_backend.model.HeroProperty;
 import de.byedev.dsatable2.dsa_table_backend.model.PropertyName;
 import de.byedev.dsatable2.dsa_table_backend.model.User;
 import de.byedev.dsatable2.dsa_table_backend.repository.CharacterRepository;
-import de.byedev.dsatable2.dsa_table_backend.repository.GameSessionRepository;
 import de.byedev.dsatable2.dsa_table_backend.repository.HeroPropertyRepository;
 import de.byedev.dsatable2.dsa_table_backend.repository.UserRepository;
 import de.byedev.dsatable2.dsa_table_backend.util.HeroXMLParser;
@@ -18,8 +16,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -38,23 +39,22 @@ public class CharacterController {
 
     private final CharacterRepository characterRepository;
     private final UserRepository userRepository;
-    private final GameSessionRepository gameSessionRepository;
     private final HeroPropertyRepository heroPropertyRepository;
     private final JwtUtil jwtUtil;
 
     public CharacterController(CharacterRepository characterRepository,
                                UserRepository userRepository,
-                               GameSessionRepository gameSessionRepository,
                                HeroPropertyRepository heroPropertyRepository,
                                JwtUtil jwtUtil) {
         this.characterRepository = characterRepository;
         this.userRepository = userRepository;
-        this.gameSessionRepository = gameSessionRepository;
         this.heroPropertyRepository = heroPropertyRepository;
         this.jwtUtil = jwtUtil;
     }
 
     @GetMapping
+    @Transactional(readOnly = true)
+    @Cacheable(value = "characters", key = "'list:' + (#ownerId != null ? 'owner:' + #ownerId : (#sessionId != null ? 'session:' + #sessionId : 'all'))")
     @Operation(summary = "Get all characters", description = "Retrieve all characters, optionally filtered by owner or session")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successfully retrieved characters")
@@ -64,15 +64,17 @@ public class CharacterController {
             @Parameter(description = "Filter by game session ID") @RequestParam(name = "sessionId", required = false) Long sessionId
     ) {
         if (ownerId != null) {
-            return characterRepository.findByOwner_Id(ownerId);
+            return characterRepository.findByOwnerId(ownerId);
         }
         if (sessionId != null) {
-            return characterRepository.findBySession_Id(sessionId);
+            return characterRepository.findBySessionId(sessionId);
         }
         return characterRepository.findAll();
     }
 
     @GetMapping("/{id}")
+    @Transactional(readOnly = true)
+    @Cacheable(value = "characters", key = "#id")
     @Operation(summary = "Get character by ID", description = "Retrieve a specific character by its ID")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Character found"),
@@ -86,6 +88,8 @@ public class CharacterController {
     }
 
     @PostMapping
+    @Transactional
+    @CacheEvict(value = "characters", allEntries = true)
     @Operation(summary = "Create a new character", description = "Create a new DSA character")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Character created successfully"),
@@ -96,19 +100,7 @@ public class CharacterController {
             return ResponseEntity.badRequest().build();
         }
 
-        if (character.getOwner() != null && character.getOwner().getId() != null) {
-            User owner = userRepository.findById(character.getOwner().getId()).orElse(null);
-            character.setOwner(owner);
-        }
-        if (character.getSession() != null && character.getSession().getId() != null) {
-            GameSession session = gameSessionRepository.findById(character.getSession().getId()).orElse(null);
-            character.setSession(session);
-        }
-
-        // Ensure bidirectional mapping for properties
-        if (character.getProperties() != null) {
-            character.getProperties().forEach(p -> p.setCharacter(character));
-        }
+        // ownerId and sessionId are already set directly from the request body
 
         // Set default avatar URL if not provided
         if (character.getAvatarUrl() == null || character.getAvatarUrl().trim().isEmpty()) {
@@ -122,6 +114,8 @@ public class CharacterController {
     }
 
     @PutMapping("/{id}")
+    @Transactional
+    @CacheEvict(value = "characters", allEntries = true)
     public ResponseEntity<Character> update(@PathVariable Long id, @RequestBody Character updated) {
         return characterRepository.findById(id)
                 .map(existing -> {
@@ -147,25 +141,27 @@ public class CharacterController {
                         existing.setAvatarUrl("/api/char");
                     }
 
-                    if (updated.getOwner() != null && updated.getOwner().getId() != null) {
-                        User owner = userRepository.findById(updated.getOwner().getId()).orElse(null);
-                        existing.setOwner(owner);
+                    // Update owner and session IDs directly
+                    if (updated.getOwnerId() != null) {
+                        existing.setOwnerId(updated.getOwnerId());
                     }
-                    if (updated.getSession() != null && updated.getSession().getId() != null) {
-                        GameSession session = gameSessionRepository.findById(updated.getSession().getId()).orElse(null);
-                        existing.setSession(session);
+                    
+                    if (updated.getSessionId() != null) {
+                        existing.setSessionId(updated.getSessionId());
                     }
 
                     if (updated.getProperties() != null) {
                         existing.setProperties(updated.getProperties());
                     }
 
-                    return ResponseEntity.ok(characterRepository.save(existing));
+                    Character saved = characterRepository.save(existing);
+                    return ResponseEntity.ok(saved);
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @DeleteMapping("/{id}")
+    @CacheEvict(value = "characters", allEntries = true)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         if (!characterRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
@@ -176,14 +172,9 @@ public class CharacterController {
 
     // ---- Property helpers ----
 
-    @GetMapping("/{id}/properties")
-    public ResponseEntity<List<HeroProperty>> getProperties(@PathVariable Long id) {
-        return characterRepository.findById(id)
-                .map(character -> ResponseEntity.ok(character.getProperties()))
-                .orElse(ResponseEntity.notFound().build());
-    }
-
     @PutMapping("/{id}/properties")
+    @Transactional
+    @CacheEvict(value = "characters", allEntries = true)
     public ResponseEntity<List<HeroProperty>> replaceProperties(@PathVariable Long id,
                                                                 @RequestBody List<HeroProperty> properties) {
         return characterRepository.findById(id)
@@ -196,6 +187,8 @@ public class CharacterController {
     }
 
     @PutMapping("/{id}/properties/{propertyName}")
+    @Transactional
+    @CacheEvict(value = "characters", allEntries = true)
     public ResponseEntity<HeroProperty> upsertSingleProperty(@PathVariable Long id,
                                                              @PathVariable PropertyName propertyName,
                                                              @RequestBody HeroProperty body) {
@@ -222,6 +215,8 @@ public class CharacterController {
     }
 
     @PostMapping("/upload-xml")
+    @Transactional
+    @CacheEvict(value = "characters", allEntries = true)
     @Operation(summary = "Upload character from XML file", description = "Upload a DSA hero XML file to create a new character")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Character created successfully from XML"),
@@ -275,13 +270,12 @@ public class CharacterController {
             String xmlContent = new String(file.getBytes(), StandardCharsets.UTF_8);
             Character character = HeroXMLParser.fromXmlData(xmlContent);
             
-            // Set owner
-            character.setOwner(owner);
+            // Set owner ID
+            character.setOwnerId(owner.getId());
             
-            // Set session if provided
+            // Set session ID if provided
             if (sessionId != null) {
-                GameSession session = gameSessionRepository.findById(sessionId).orElse(null);
-                character.setSession(session);
+                character.setSessionId(sessionId);
             }
             
             // Initialize current resources based on calculated totals
@@ -294,10 +288,9 @@ public class CharacterController {
                 character.setAvatarUrl("/api/char");
             }
             
-            // Ensure bidirectional mapping for properties
-            if (character.getProperties() != null) {
-                character.getProperties().forEach(p -> p.setCharacter(character));
-            }
+            // Note: Bidirectional mappings are already handled by the setter methods
+            // (setTalents, setSpells, etc. use addTalent, addSpell which set the character reference)
+            // Batch inserts will be used automatically due to Hibernate batch configuration
 
             Character saved = characterRepository.save(character);
             return ResponseEntity
@@ -309,6 +302,7 @@ public class CharacterController {
                     .body(Map.of("error", "Failed to parse XML: " + e.getMessage()));
         }
     }
+
 }
 
 

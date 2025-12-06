@@ -1,0 +1,58 @@
+// Modern Color Palette for DSA Table App
+// A warm, fantasy-themed palette with better contrast and modern aesthetics
+
+// Primary Colors
+$color-primary: #2d5016;        // Deep forest green (replaces brown)
+$color-primary-light: #4a7c2a;  // Lighter green
+$color-primary-dark: #1a3009;   // Darker green
+$color-primary-accent: #6b9f3d; // Bright green accent
+
+// Secondary Colors
+$color-secondary: #8b5a3c;      // Warm terracotta (replaces old brown)
+$color-secondary-light: #a67c5a;
+$color-secondary-dark: #6b4423;
+
+// Accent Colors
+$color-accent: #c97d60;         // Warm coral (replaces crimson)
+$color-accent-light: #e09d7f;
+$color-accent-dark: #a85d42;
+
+// Background Colors
+$color-bg-primary: #faf8f3;      // Warm off-white (slightly warmer)
+$color-bg-secondary: #f5f1e8;   // Slightly darker cream
+$color-bg-card: #ffffff;        // Pure white for cards
+$color-bg-hover: #f9f7f2;       // Hover state
+
+// Border Colors
+$color-border: #d9d0c0;         // Soft beige border
+$color-border-light: #e8e1d4;  // Lighter border
+$color-border-dark: #c4b8a5;    // Darker border
+$color-border-accent: #6b9f3d; // Accent border
+
+// Text Colors
+$color-text-primary: #2c2416;   // Dark brown/black
+$color-text-secondary: #5a4a3a; // Medium brown
+$color-text-light: #8b7d6b;     // Light brown
+$color-text-muted: #a69b8a;     // Muted text
+
+// Stat Colors
+$color-life: #d32f2f;           // Red for life points
+$color-astral: #1976d2;          // Blue for astral points
+$color-karma: #6b9f3d;           // Green for karma points
+
+// Status Colors
+$color-success: #4caf50;
+$color-warning: #ff9800;
+$color-error: #f44336;
+$color-info: #2196f3;
+
+// Shadow Colors
+$shadow-sm: rgba(0, 0, 0, 0.06);
+$shadow-md: rgba(0, 0, 0, 0.1);
+$shadow-lg: rgba(0, 0, 0, 0.15);
+$shadow-primary: rgba(107, 159, 61, 0.15);
+$shadow-accent: rgba(201, 125, 96, 0.2);
+
+// Overlay Colors
+$overlay-dark: rgba(0, 0, 0, 0.5);
+$overlay-light: rgba(0, 0, 0, 0.1);

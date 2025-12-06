@@ -1,6 +1,5 @@
 package de.byedev.dsatable2.dsa_table_backend.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.*;
 
@@ -10,16 +9,15 @@ import jakarta.persistence.*;
 public class Speciality {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "speciality_seq")
+    @SequenceGenerator(name = "speciality_seq", sequenceName = "speciality_seq", allocationSize = 50)
     private Long id;
 
     @Column(nullable = false, length = 128)
     private String name;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "character_id")
-    @JsonIgnore
-    private Character character;
+    @Column(name = "character_id")
+    private Long characterId;
 
     public Speciality() {
     }
@@ -40,12 +38,12 @@ public class Speciality {
         this.name = name;
     }
 
-    public Character getCharacter() {
-        return character;
+    public Long getCharacterId() {
+        return characterId;
     }
 
-    public void setCharacter(Character character) {
-        this.character = character;
+    public void setCharacterId(Long characterId) {
+        this.characterId = characterId;
     }
 
     @Override

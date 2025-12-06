@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import de.byedev.dsatable2.dsa_table_backend.util.HeroXMLParser;
 import jakarta.persistence.*;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +23,7 @@ import static de.byedev.dsatable2.dsa_table_backend.model.PropertyName.*;
 @JsonPropertyOrder({
     "id", "name", "race", "culture", "profession", "gender", "archetype",
     "xp", "currentLife", "currentAsp", "currentKarma", "initiative",
-    "armourBe", "wearingArmour", "wounds", "notes", "avatarUrl",
+    "armourBe", "wearingArmour", "wounds", "notes", "avatarUrl", "ownerId",
     "properties", "talents", "spells", "combatTalents", "advantages", "specialities"
 })
 public class Character {
@@ -29,7 +31,8 @@ public class Character {
     private static final Logger LOG = LoggerFactory.getLogger(Character.class);
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "character_seq")
+    @SequenceGenerator(name = "character_seq", sequenceName = "character_seq", allocationSize = 50)
     private Long id;
 
     @Column(nullable = false, length = 128)
@@ -89,32 +92,41 @@ public class Character {
     @JsonIgnore
     private String rawData;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id")
-    @JsonIgnore
-    private User owner;
+    @Column(name = "owner_id")
+    private Long ownerId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "session_id")
+    @Column(name = "session_id")
     @JsonIgnore
-    private GameSession session;
+    private Long sessionId;
 
-    @OneToMany(mappedBy = "character", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "character_id")
+    @Fetch(FetchMode.SUBSELECT)
     private List<HeroProperty> properties = new ArrayList<>();
 
-    @OneToMany(mappedBy = "character", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "character_id")
+    @Fetch(FetchMode.SUBSELECT)
     private List<Talent> talents = new ArrayList<>();
 
-    @OneToMany(mappedBy = "character", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "character_id")
+    @Fetch(FetchMode.SUBSELECT)
     private List<Spell> spells = new ArrayList<>();
 
-    @OneToMany(mappedBy = "character", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "character_id")
+    @Fetch(FetchMode.SUBSELECT)
     private List<CombatTalent> combatTalents = new ArrayList<>();
 
-    @OneToMany(mappedBy = "character", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "character_id")
+    @Fetch(FetchMode.SUBSELECT)
     private List<Advantage> advantages = new ArrayList<>();
 
-    @OneToMany(mappedBy = "character", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "character_id")
+    @Fetch(FetchMode.SUBSELECT)
     private List<Speciality> specialities = new ArrayList<>();
 
     public Character() {
@@ -272,21 +284,22 @@ public class Character {
         this.rawData = rawData;
     }
 
-    public User getOwner() {
-        return owner;
+    public Long getOwnerId() {
+        return ownerId;
     }
 
-    public void setOwner(User owner) {
-        this.owner = owner;
+    public void setOwnerId(Long ownerId) {
+        this.ownerId = ownerId;
     }
 
-    public GameSession getSession() {
-        return session;
+    public Long getSessionId() {
+        return sessionId;
     }
 
-    public void setSession(GameSession session) {
-        this.session = session;
+    public void setSessionId(Long sessionId) {
+        this.sessionId = sessionId;
     }
+    
 
     public List<HeroProperty> getProperties() {
         return properties;
@@ -294,8 +307,13 @@ public class Character {
 
     public void setProperties(List<HeroProperty> properties) {
         this.properties.clear();
-        if (properties != null) {
-            properties.forEach(this::addProperty);
+        if (properties != null && id != null) {
+            properties.forEach(p -> {
+                p.setCharacterId(id);
+                this.properties.add(p);
+            });
+        } else if (properties != null) {
+            this.properties.addAll(properties);
         }
     }
 
@@ -303,8 +321,10 @@ public class Character {
         if (property == null) {
             return;
         }
+        if (id != null) {
+            property.setCharacterId(id);
+        }
         properties.add(property);
-        property.setCharacter(this);
     }
 
     public void removeProperty(HeroProperty property) {
@@ -312,7 +332,6 @@ public class Character {
             return;
         }
         properties.remove(property);
-        property.setCharacter(null);
     }
 
     public List<Talent> getTalents() {
@@ -321,8 +340,13 @@ public class Character {
 
     public void setTalents(List<Talent> talents) {
         this.talents.clear();
-        if (talents != null) {
-            talents.forEach(this::addTalent);
+        if (talents != null && id != null) {
+            talents.forEach(t -> {
+                t.setCharacterId(id);
+                this.talents.add(t);
+            });
+        } else if (talents != null) {
+            this.talents.addAll(talents);
         }
     }
 
@@ -330,8 +354,10 @@ public class Character {
         if (talent == null) {
             return;
         }
+        if (id != null) {
+            talent.setCharacterId(id);
+        }
         talents.add(talent);
-        talent.setCharacter(this);
     }
 
     public void removeTalent(Talent talent) {
@@ -339,7 +365,6 @@ public class Character {
             return;
         }
         talents.remove(talent);
-        talent.setCharacter(null);
     }
 
     public List<Spell> getSpells() {
@@ -348,8 +373,13 @@ public class Character {
 
     public void setSpells(List<Spell> spells) {
         this.spells.clear();
-        if (spells != null) {
-            spells.forEach(this::addSpell);
+        if (spells != null && id != null) {
+            spells.forEach(s -> {
+                s.setCharacterId(id);
+                this.spells.add(s);
+            });
+        } else if (spells != null) {
+            this.spells.addAll(spells);
         }
     }
 
@@ -357,8 +387,10 @@ public class Character {
         if (spell == null) {
             return;
         }
+        if (id != null) {
+            spell.setCharacterId(id);
+        }
         spells.add(spell);
-        spell.setCharacter(this);
     }
 
     public void removeSpell(Spell spell) {
@@ -366,7 +398,6 @@ public class Character {
             return;
         }
         spells.remove(spell);
-        spell.setCharacter(null);
     }
 
     public List<CombatTalent> getCombatTalents() {
@@ -375,8 +406,13 @@ public class Character {
 
     public void setCombatTalents(List<CombatTalent> combatTalents) {
         this.combatTalents.clear();
-        if (combatTalents != null) {
-            combatTalents.forEach(this::addCombatTalent);
+        if (combatTalents != null && id != null) {
+            combatTalents.forEach(ct -> {
+                ct.setCharacterId(id);
+                this.combatTalents.add(ct);
+            });
+        } else if (combatTalents != null) {
+            this.combatTalents.addAll(combatTalents);
         }
     }
 
@@ -384,8 +420,10 @@ public class Character {
         if (combatTalent == null) {
             return;
         }
+        if (id != null) {
+            combatTalent.setCharacterId(id);
+        }
         combatTalents.add(combatTalent);
-        combatTalent.setCharacter(this);
     }
 
     public void removeCombatTalent(CombatTalent combatTalent) {
@@ -393,7 +431,6 @@ public class Character {
             return;
         }
         combatTalents.remove(combatTalent);
-        combatTalent.setCharacter(null);
     }
 
     public List<Advantage> getAdvantages() {
@@ -402,8 +439,13 @@ public class Character {
 
     public void setAdvantages(List<Advantage> advantages) {
         this.advantages.clear();
-        if (advantages != null) {
-            advantages.forEach(this::addAdvantage);
+        if (advantages != null && id != null) {
+            advantages.forEach(a -> {
+                a.setCharacterId(id);
+                this.advantages.add(a);
+            });
+        } else if (advantages != null) {
+            this.advantages.addAll(advantages);
         }
     }
 
@@ -411,8 +453,10 @@ public class Character {
         if (advantage == null) {
             return;
         }
+        if (id != null) {
+            advantage.setCharacterId(id);
+        }
         advantages.add(advantage);
-        advantage.setCharacter(this);
     }
 
     public void removeAdvantage(Advantage advantage) {
@@ -420,7 +464,6 @@ public class Character {
             return;
         }
         advantages.remove(advantage);
-        advantage.setCharacter(null);
     }
 
     public List<Speciality> getSpecialities() {
@@ -429,8 +472,13 @@ public class Character {
 
     public void setSpecialities(List<Speciality> specialities) {
         this.specialities.clear();
-        if (specialities != null) {
-            specialities.forEach(this::addSpeciality);
+        if (specialities != null && id != null) {
+            specialities.forEach(sp -> {
+                sp.setCharacterId(id);
+                this.specialities.add(sp);
+            });
+        } else if (specialities != null) {
+            this.specialities.addAll(specialities);
         }
     }
 
@@ -438,8 +486,10 @@ public class Character {
         if (speciality == null) {
             return;
         }
+        if (id != null) {
+            speciality.setCharacterId(id);
+        }
         specialities.add(speciality);
-        speciality.setCharacter(this);
     }
 
     public void removeSpeciality(Speciality speciality) {
@@ -447,7 +497,6 @@ public class Character {
             return;
         }
         specialities.remove(speciality);
-        speciality.setCharacter(null);
     }
 
     // ---- Derived values & utility methods (similar to legacy Hero) ----
@@ -667,6 +716,61 @@ public class Character {
         setSpecialities(other.getSpecialities());
 
         updateCalculated();
+    }
+
+    /**
+     * Ensure all collections have the characterId set.
+     * Called after persist/update to maintain referential integrity.
+     * This ensures the characterId field in child entities matches the database foreign key.
+     */
+    @PostPersist
+    @PostUpdate
+    private void ensureCharacterIds() {
+        if (id == null) {
+            return;
+        }
+        if (properties != null) {
+            properties.forEach(p -> {
+                if (p.getCharacterId() == null) {
+                    p.setCharacterId(id);
+                }
+            });
+        }
+        if (talents != null) {
+            talents.forEach(t -> {
+                if (t.getCharacterId() == null) {
+                    t.setCharacterId(id);
+                }
+            });
+        }
+        if (spells != null) {
+            spells.forEach(s -> {
+                if (s.getCharacterId() == null) {
+                    s.setCharacterId(id);
+                }
+            });
+        }
+        if (combatTalents != null) {
+            combatTalents.forEach(ct -> {
+                if (ct.getCharacterId() == null) {
+                    ct.setCharacterId(id);
+                }
+            });
+        }
+        if (advantages != null) {
+            advantages.forEach(a -> {
+                if (a.getCharacterId() == null) {
+                    a.setCharacterId(id);
+                }
+            });
+        }
+        if (specialities != null) {
+            specialities.forEach(sp -> {
+                if (sp.getCharacterId() == null) {
+                    sp.setCharacterId(id);
+                }
+            });
+        }
     }
 }
 

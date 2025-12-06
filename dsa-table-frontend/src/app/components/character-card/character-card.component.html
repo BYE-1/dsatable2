@@ -1,0 +1,262 @@
+<div class="character-card"
+     [class.collapsed]="isCharacterCollapsed()"
+     [class.compact-mode]="compact"
+     (click)="onCharacterClick()">
+  <!-- Compact View (when collapsed) -->
+  <div *ngIf="isCharacterCollapsed()" class="character-compact">
+    <button 
+      *ngIf="showExpandButton"
+      type="button"
+      class="collapse-toggle"
+      (click)="toggleCharacter($event)"
+      title="Expand character">
+      <span class="collapse-icon">▼</span>
+    </button>
+    <div class="compact-content">
+      <div class="character-avatar-compact">
+        <img [src]="getAvatarUrl()" [alt]="character.name + ' avatar'" [title]="character.name + ' avatar'" class="avatar-img-compact">
+        <button 
+          *ngIf="showExpandButton"
+          type="button"
+          class="avatar-edit-btn-compact"
+          (click)="openAvatarDialog($event)"
+          title="Edit avatar">
+          ✏️
+        </button>
+      </div>
+      <div class="compact-text-content">
+        <h3 class="compact-name">{{ character.name }}</h3>
+        <div class="compact-info">
+          <span *ngIf="character.race" class="info-badge" [title]="character.race">{{ character.race }}</span>
+          <span *ngIf="character.culture" class="info-badge" [title]="character.culture">{{ character.culture }}</span>
+          <span *ngIf="character.profession" class="profession-badge" [title]="character.profession">{{ character.profession }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full View (when expanded) -->
+  <div *ngIf="!isCharacterCollapsed() && !compact">
+    <div class="character-header">
+      <button 
+        *ngIf="showExpandButton"
+        type="button"
+        class="collapse-toggle"
+        (click)="toggleCharacter($event)"
+        title="Collapse character">
+        <span class="collapse-icon">▲</span>
+      </button>
+      <div class="character-avatar-section">
+        <img [src]="getAvatarUrl()" [alt]="character.name + ' avatar'" [title]="character.name + ' avatar'" class="avatar-img">
+        <button 
+          *ngIf="showExpandButton"
+          type="button"
+          class="avatar-edit-btn"
+          (click)="openAvatarDialog($event)"
+          title="Edit avatar">
+          Edit Avatar
+        </button>
+      </div>
+      <h3>{{ character.name }}</h3>
+      <div class="character-basic-info">
+        <div class="info-row" *ngIf="character.race || character.culture">
+          <span *ngIf="character.race" class="info-badge" [title]="character.race">{{ character.race }}</span>
+          <span *ngIf="character.culture" class="info-badge" [title]="character.culture">{{ character.culture }}</span>
+        </div>
+        <div class="info-row" *ngIf="character.profession">
+          <span class="profession-badge" [title]="character.profession">{{ character.profession }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="character-stats">
+      <div class="stat-group">
+        <div class="stat-item" *ngIf="character.currentLife !== undefined">
+          <div class="stat-label">Life Points</div>
+          <div class="stat-value life">{{ character.currentLife }}</div>
+        </div>
+        <div class="stat-item" *ngIf="character.currentAsp !== undefined">
+          <div class="stat-label">Astral Points</div>
+          <div class="stat-value asp">{{ character.currentAsp }}</div>
+        </div>
+        <div class="stat-item" *ngIf="character.currentKarma !== undefined">
+          <div class="stat-label">Karma Points</div>
+          <div class="stat-value karma">{{ character.currentKarma }}</div>
+        </div>
+      </div>
+      <div class="stat-group secondary" *ngIf="character.xp !== undefined || character.initiative !== undefined">
+        <div class="stat-item small" *ngIf="character.xp !== undefined">
+          <div class="stat-label">XP</div>
+          <div class="stat-value">{{ character.xp }}</div>
+        </div>
+        <div class="stat-item small" *ngIf="character.initiative !== undefined">
+          <div class="stat-label">Initiative</div>
+          <div class="stat-value">{{ character.initiative }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="character-details">
+      <div class="detail-section" *ngIf="character.properties && character.properties.length > 0">
+        <h4 class="section-title">Properties</h4>
+        <div class="properties-grid">
+          <div *ngFor="let prop of character.properties" class="property-item">
+            <span class="property-name">{{ prop.name }}</span>
+            <span class="property-value">{{ prop.value }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-section" *ngIf="character.talents && character.talents.length > 0">
+        <h4 class="section-title collapsible" (click)="toggleSection('talents')">
+          <span class="collapse-icon">{{ isCollapsed('talents') ? '▶' : '▼' }}</span>
+          Talents <span class="count-badge">({{ character.talents.length }})</span>
+        </h4>
+        <div class="abilities-list" *ngIf="!isCollapsed('talents')">
+          <div *ngFor="let talent of character.talents" class="ability-item">
+            <span class="ability-name">{{ talent.name }}</span>
+            <span class="ability-value">{{ talent.value }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-section" *ngIf="character.spells && character.spells.length > 0">
+        <h4 class="section-title collapsible" (click)="toggleSection('spells')">
+          <span class="collapse-icon">{{ isCollapsed('spells') ? '▶' : '▼' }}</span>
+          Spells <span class="count-badge">({{ character.spells.length }})</span>
+        </h4>
+        <div class="abilities-list" *ngIf="!isCollapsed('spells')">
+          <div *ngFor="let spell of character.spells" class="ability-item">
+            <span class="ability-name">{{ spell.name }}</span>
+            <span class="ability-value">{{ spell.value }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-section" *ngIf="character.combatTalents && character.combatTalents.length > 0">
+        <h4 class="section-title collapsible" (click)="toggleSection('combatTalents')">
+          <span class="collapse-icon">{{ isCollapsed('combatTalents') ? '▶' : '▼' }}</span>
+          Combat Talents <span class="count-badge">({{ character.combatTalents.length }})</span>
+        </h4>
+        <div class="combat-talents-list" *ngIf="!isCollapsed('combatTalents')">
+          <div *ngFor="let combat of character.combatTalents" class="combat-item">
+            <span class="combat-name">{{ combat.name }}</span>
+            <span class="combat-stats">AT {{ combat.attack }} / PA {{ combat.parry }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Avatar Edit Dialog -->
+<div *ngIf="showAvatarDialog" class="avatar-dialog-overlay" (click)="closeAvatarDialog()">
+  <div class="avatar-dialog" (click)="$event.stopPropagation()">
+    <div class="avatar-dialog-header">
+      <h3>Edit Avatar: {{ character.name }}</h3>
+      <button type="button" class="dialog-close-btn" (click)="closeAvatarDialog()">✕</button>
+    </div>
+    
+    <div class="avatar-dialog-content">
+      <div class="avatar-preview-section">
+        <h4>Preview</h4>
+        <div class="avatar-preview">
+          <img [src]="getPreviewUrl()" alt="Avatar preview" class="avatar-preview-img">
+        </div>
+      </div>
+
+      <div class="avatar-options-section">
+        <div class="avatar-option-group">
+          <label>Hair Style</label>
+          <select [(ngModel)]="avatarOptions.hair" class="avatar-select" title="Select hair style">
+            <option [value]="''">Bald (default)</option>
+            <option value="long">Long</option>
+            <option value="short_ruffled">Short Ruffled</option>
+            <option value="short_curly">Short Curly</option>
+            <option value="undercut">Undercut</option>
+            <option value="tomahawk">Tomahawk</option>
+          </select>
+        </div>
+
+        <div class="avatar-option-group">
+          <label>Hair Color</label>
+          <input type="color" [(ngModel)]="avatarOptions.hairColour" class="avatar-color-input" title="Select hair color">
+        </div>
+
+        <div class="avatar-option-group">
+          <label>Skin Color</label>
+          <input type="color" [(ngModel)]="avatarOptions.skin" class="avatar-color-input" title="Select skin color">
+        </div>
+
+        <div class="avatar-option-group">
+          <label>Clothing Color</label>
+          <input type="color" [(ngModel)]="avatarOptions.clothC" class="avatar-color-input" title="Select clothing color">
+        </div>
+
+        <div class="avatar-option-group">
+          <label>Mouth</label>
+          <select [(ngModel)]="avatarOptions.mouth" class="avatar-select" title="Select mouth expression">
+            <option value="up">Up</option>
+            <option value="down">Down</option>
+            <option value="straight">Straight</option>
+            <option value="covered">Covered</option>
+          </select>
+        </div>
+
+        <div class="avatar-option-group">
+          <label>Ears</label>
+          <select [(ngModel)]="avatarOptions.ears" class="avatar-select" title="Select ear type">
+            <option value="none">None</option>
+            <option value="normal">Normal</option>
+            <option value="pointy">Pointy</option>
+          </select>
+        </div>
+
+        <div class="avatar-option-group">
+          <label>Eyebrows</label>
+          <select [(ngModel)]="avatarOptions.eyebrows" class="avatar-select" title="Select eyebrow style">
+            <option value="none">None</option>
+            <option value="straight">Straight</option>
+            <option value="down">Down</option>
+          </select>
+        </div>
+
+        <div class="avatar-option-group">
+          <label>Weapon</label>
+          <select [(ngModel)]="avatarOptions.weapon" class="avatar-select" title="Select weapon">
+            <option value="none">None</option>
+            <option value="sword">Sword</option>
+            <option value="axe">Axe</option>
+            <option value="bow">Bow</option>
+            <option value="mage_staff">Mage Staff</option>
+          </select>
+        </div>
+
+        <div class="avatar-option-group">
+          <label>Equipment</label>
+          <div class="avatar-checkboxes">
+            <label class="avatar-checkbox-label">
+              <input 
+                type="checkbox" 
+                [checked]="isEquipSelected('shoulder_pads')"
+                (change)="toggleEquip('shoulder_pads')">
+              Shoulder Pads
+            </label>
+            <label class="avatar-checkbox-label">
+              <input 
+                type="checkbox" 
+                [checked]="isEquipSelected('helmet')"
+                (change)="toggleEquip('helmet')">
+              Helmet
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="avatar-dialog-footer">
+      <button type="button" class="btn-cancel" (click)="closeAvatarDialog()">Cancel</button>
+      <button type="button" class="btn-save" (click)="saveAvatar()">Save</button>
+    </div>
+  </div>
+</div>

@@ -34,7 +34,7 @@ export class LoginComponent {
       
       this.authService.login(this.loginForm.value).subscribe({
         next: () => {
-          this.router.navigate(['/characters']);
+          this.router.navigate(['/']);
         },
         error: (error) => {
           if (error.status === 0 || error.message?.includes('Failed to fetch') || error.message?.includes('ERR_CONNECTION_REFUSED')) {

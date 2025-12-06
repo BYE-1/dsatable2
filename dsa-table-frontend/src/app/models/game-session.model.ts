@@ -1,5 +1,6 @@
 import { Character } from './character.model';
 import { User } from './auth.model';
+import { Battlemap } from './battlemap.model';
 
 export interface GameSession {
   id?: number;
@@ -9,4 +10,5 @@ export interface GameSession {
   players?: User[];
   characters?: Character[];
   createdAt?: string;
+  battlemap?: Battlemap;
 }

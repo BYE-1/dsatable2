@@ -17,6 +17,7 @@ export interface Character {
   wounds?: number;
   notes?: string;
   avatarUrl?: string;
+  ownerId?: number;
   properties?: HeroProperty[];
   talents?: Talent[];
   spells?: Spell[];

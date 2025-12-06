@@ -13,7 +13,8 @@ public class HeroProperty {
     public static final transient HeroProperty NONE = new HeroProperty(PropertyName.NONE, 0);
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "hero_property_seq")
+    @SequenceGenerator(name = "hero_property_seq", sequenceName = "hero_property_seq", allocationSize = 50)
     private Long id;
 
     @Enumerated(EnumType.STRING)
@@ -24,10 +25,8 @@ public class HeroProperty {
     @Column(name = "prop_value", nullable = false)
     private int value;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "character_id")
-    @JsonIgnore
-    private Character character;
+    @Column(name = "character_id")
+    private Long characterId;
 
     public HeroProperty() {
     }
@@ -63,12 +62,12 @@ public class HeroProperty {
         this.value = value;
     }
 
-    public Character getCharacter() {
-        return character;
+    public Long getCharacterId() {
+        return characterId;
     }
 
-    public void setCharacter(Character character) {
-        this.character = character;
+    public void setCharacterId(Long characterId) {
+        this.characterId = characterId;
     }
 
     @Override

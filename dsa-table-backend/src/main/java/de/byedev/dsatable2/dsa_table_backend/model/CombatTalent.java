@@ -1,6 +1,5 @@
 package de.byedev.dsatable2.dsa_table_backend.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.*;
 
@@ -12,7 +11,8 @@ public class CombatTalent {
     public static final String BASE_TALENT_NAME = "Basis";
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "combat_talent_seq")
+    @SequenceGenerator(name = "combat_talent_seq", sequenceName = "combat_talent_seq", allocationSize = 50)
     private Long id;
 
     @Column(nullable = false, length = 128)
@@ -24,10 +24,8 @@ public class CombatTalent {
     @Column(nullable = false)
     private int parry;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "character_id")
-    @JsonIgnore
-    private Character character;
+    @Column(name = "character_id")
+    private Long characterId;
 
     public CombatTalent() {
     }
@@ -66,12 +64,12 @@ public class CombatTalent {
         this.parry = parry;
     }
 
-    public Character getCharacter() {
-        return character;
+    public Long getCharacterId() {
+        return characterId;
     }
 
-    public void setCharacter(Character character) {
-        this.character = character;
+    public void setCharacterId(Long characterId) {
+        this.characterId = characterId;
     }
 }
 

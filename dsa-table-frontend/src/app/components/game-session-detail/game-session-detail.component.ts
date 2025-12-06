@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, OnInit, ViewChild, AfterViewInit, OnDestroy, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -9,17 +9,22 @@ import { AuthService } from '../../services/auth.service';
 import { GameSession } from '../../models/game-session.model';
 import { Character } from '../../models/character.model';
 import { ChatComponent } from '../chat/chat.component';
+import { BattlemapComponent } from '../battlemap/battlemap.component';
 import { environment } from '../../../environments/environment';
+import { Subscription, interval } from 'rxjs';
+import { switchMap, startWith } from 'rxjs/operators';
 
 @Component({
   selector: 'app-game-session-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink, ChatComponent, FormsModule],
+  imports: [CommonModule, ChatComponent, BattlemapComponent, FormsModule],
   templateUrl: './game-session-detail.component.html',
   styleUrl: './game-session-detail.component.scss'
 })
-export class GameSessionDetailComponent implements OnInit, AfterViewInit {
+export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('chatComponent') chatComponent!: ChatComponent;
+  @ViewChild('talentInput') talentInput!: ElementRef<HTMLInputElement>;
+  @ViewChild('talentWrapper') talentWrapper!: ElementRef<HTMLDivElement>;
   
   session: GameSession | null = null;
   characters: Character[] = [];
@@ -37,11 +42,16 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit {
   joiningSession = false;
   myCharacter: Character | null = null;
   
+  // Polling subscriptions
+  private charactersPollingSubscription?: Subscription;
+  private sessionPollingSubscription?: Subscription;
+  
   // Talent rolling
   selectedTalentId: number | null = null;
   talentSearchTerm: string = '';
   showTalentDropdown: boolean = false;
   highlightedTalentIndex: number = -1;
+  dropdownPosition: { left: number; bottom: number; width: number } = { left: 0, bottom: 0, width: 0 };
 
   // Character stat modifications
   showLifeMod: boolean = false;
@@ -51,7 +61,7 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit {
   showRest: boolean = false;
   lifeModValue: number = 0;
   aspModValue: number = 0;
-  woundsModValue: number = 0;
+  woundsValue: number | null = null;
   beModValue: number = 0;
 
   constructor(
@@ -74,12 +84,100 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit {
       if (this.sessionId) {
         this.loadSession();
         this.loadCharacters();
+        this.startPolling();
       }
     });
   }
 
   ngAfterViewInit(): void {
     // ViewChild is now available
+  }
+
+  ngOnDestroy(): void {
+    this.stopPolling();
+  }
+
+  startPolling(): void {
+    if (!this.sessionId) return;
+
+    // Poll for characters every 5 seconds
+    this.charactersPollingSubscription = interval(5000).pipe(
+      startWith(0),
+      switchMap(() => {
+        if (!this.sessionId) return [];
+        return this.characterService.getAllCharacters(undefined, this.sessionId);
+      })
+    ).subscribe({
+      next: (data: Character[]) => {
+        // Only update if characters have changed
+        const currentIds = this.characters.map(c => c.id).sort().join(',');
+        const newIds = data.map(c => c.id).sort().join(',');
+        
+        if (currentIds !== newIds || this.characters.length !== data.length) {
+          // Sort by initiative (descending), then by name
+          this.characters = data.sort((a, b) => {
+            const initA = a.initiative ?? 0;
+            const initB = b.initiative ?? 0;
+            if (initA !== initB) {
+              return initB - initA; // Higher initiative first
+            }
+            return (a.name || '').localeCompare(b.name || '');
+          });
+        } else {
+          // Even if IDs are the same, update data in case stats changed
+          // Merge updates to preserve any local state
+          data.forEach(newChar => {
+            const existing = this.characters.find(c => c.id === newChar.id);
+            if (existing) {
+              // Update properties but preserve order
+              Object.assign(existing, newChar);
+            }
+          });
+        }
+      },
+      error: (err: any) => {
+        console.error('Error polling characters:', err);
+      }
+    });
+
+    // Poll for session data every 5 seconds to get updated players list
+    this.sessionPollingSubscription = interval(5000).pipe(
+      startWith(0),
+      switchMap(() => {
+        if (!this.sessionId) return [];
+        return this.gameSessionService.getSessionById(this.sessionId);
+      })
+    ).subscribe({
+      next: (data: GameSession) => {
+        // Only update if players list has changed
+        const currentPlayerIds = this.session?.players?.map(p => p.id).sort().join(',') || '';
+        const newPlayerIds = data.players?.map(p => p.id).sort().join(',') || '';
+        
+        if (currentPlayerIds !== newPlayerIds) {
+          this.session = data;
+        } else {
+          // Update session data but preserve structure
+          if (this.session) {
+            this.session.players = data.players;
+            this.session.gameMaster = data.gameMaster;
+          }
+        }
+      },
+      error: (err: any) => {
+        console.error('Error polling session:', err);
+      }
+    });
+  }
+
+  stopPolling(): void {
+    if (this.charactersPollingSubscription) {
+      this.charactersPollingSubscription.unsubscribe();
+      this.charactersPollingSubscription = undefined;
+    }
+    if (this.sessionPollingSubscription) {
+      this.sessionPollingSubscription.unsubscribe();
+      this.sessionPollingSubscription = undefined;
+    }
   }
 
   loadSession(): void {
@@ -293,6 +391,41 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit {
     const talent = this.myCharacter.talents.find(t => t.id === this.selectedTalentId);
     if (!talent) return 'Select a talent...';
     return `${talent.name} (${talent.check}) - ${talent.value}`;
+  }
+
+  onTalentInputFocus(): void {
+    this.showTalentDropdown = true;
+    this.highlightedTalentIndex = -1;
+    this.calculateDropdownPosition();
+  }
+
+  calculateDropdownPosition(): void {
+    if (!this.talentInput || !this.talentWrapper) {
+      setTimeout(() => this.calculateDropdownPosition(), 50);
+      return;
+    }
+
+    const inputElement = this.talentInput.nativeElement;
+    const rect = inputElement.getBoundingClientRect();
+    
+    this.dropdownPosition = {
+      left: rect.left,
+      bottom: window.innerHeight - rect.top,
+      width: rect.width
+    };
+  }
+
+  onTalentInputChange(): void {
+    this.highlightedTalentIndex = -1;
+    
+    // Open dropdown if it's not already open and there are filtered results
+    if (!this.showTalentDropdown) {
+      const filteredTalents = this.getFilteredTalents();
+      if (filteredTalents.length > 0 || this.talentSearchTerm.trim().length > 0) {
+        this.showTalentDropdown = true;
+        this.calculateDropdownPosition();
+      }
+    }
   }
 
   onTalentInputBlur(): void {
@@ -536,8 +669,12 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit {
     this.selectedTalentId = null;
   }
 
+  quickModifyLife(amount: number): void {
+    this.lifeModValue = (this.lifeModValue || 0) + amount;
+  }
+
   modifyLife(): void {
-    if (!this.myCharacter || !this.myCharacter.id) return;
+    if (!this.myCharacter || !this.myCharacter.id || this.lifeModValue === 0) return;
     
     const newValue = (this.myCharacter.currentLife || 0) + this.lifeModValue;
     const updatedCharacter = { ...this.myCharacter, currentLife: Math.max(0, newValue) };
@@ -549,7 +686,6 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit {
         if (this.chatComponent) {
           this.chatComponent.sendMessage(message);
         }
-        this.showLifeMod = false;
         this.lifeModValue = 0;
         // Reload characters to update the list
         this.loadCharacters();
@@ -560,8 +696,12 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit {
     });
   }
 
+  quickModifyAsp(amount: number): void {
+    this.aspModValue = (this.aspModValue || 0) + amount;
+  }
+
   modifyAsp(): void {
-    if (!this.myCharacter || !this.myCharacter.id) return;
+    if (!this.myCharacter || !this.myCharacter.id || this.aspModValue === 0) return;
     
     const newValue = (this.myCharacter.currentAsp || 0) + this.aspModValue;
     const updatedCharacter = { ...this.myCharacter, currentAsp: Math.max(0, newValue) };
@@ -573,7 +713,6 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit {
         if (this.chatComponent) {
           this.chatComponent.sendMessage(message);
         }
-        this.showAspMod = false;
         this.aspModValue = 0;
         // Reload characters to update the list
         this.loadCharacters();
@@ -584,32 +723,55 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit {
     });
   }
 
-  modifyWounds(): void {
-    if (!this.myCharacter || !this.myCharacter.id) return;
+  onWoundsFocus(): void {
+    // Initialize with current wounds value when focusing
+    if (this.myCharacter && this.woundsValue === null) {
+      this.woundsValue = this.myCharacter.wounds ?? 0;
+    }
+  }
+
+  setWounds(): void {
+    if (!this.myCharacter || !this.myCharacter.id || this.woundsValue === null) {
+      this.woundsValue = null;
+      return;
+    }
     
-    const newValue = (this.myCharacter.wounds || 0) + this.woundsModValue;
-    const updatedCharacter = { ...this.myCharacter, wounds: Math.max(0, newValue) };
+    const newValue = Math.max(0, this.woundsValue);
+    const oldValue = this.myCharacter.wounds || 0;
+    
+    // Only update if the value actually changed
+    if (newValue === oldValue) {
+      this.woundsValue = null;
+      return;
+    }
+    
+    const updatedCharacter = { ...this.myCharacter, wounds: newValue };
     
     this.characterService.updateCharacter(this.myCharacter.id, updatedCharacter).subscribe({
       next: (character: Character) => {
         this.myCharacter = character;
-        const message = `${character.name} ${this.woundsModValue >= 0 ? '+' : ''}${this.woundsModValue} Wounds = ${character.wounds}`;
+        const change = newValue - oldValue;
+        const message = `${character.name} ${change >= 0 ? '+' : ''}${change} Wounds = ${character.wounds}`;
         if (this.chatComponent) {
           this.chatComponent.sendMessage(message);
         }
-        this.showWoundsMod = false;
-        this.woundsModValue = 0;
+        this.woundsValue = null;
         // Reload characters to update the list
         this.loadCharacters();
       },
       error: (err: any) => {
         console.error('Error updating wounds:', err);
+        this.woundsValue = null;
       }
     });
   }
 
+  quickModifyBe(amount: number): void {
+    this.beModValue = (this.beModValue || 0) + amount;
+  }
+
   modifyBe(): void {
-    if (!this.myCharacter || !this.myCharacter.id || !this.myCharacter.wearingArmour) return;
+    if (!this.myCharacter || !this.myCharacter.id || !this.myCharacter.wearingArmour || this.beModValue === 0) return;
     
     const newValue = (this.myCharacter.armourBe || 0) + this.beModValue;
     const updatedCharacter = { ...this.myCharacter, armourBe: Math.max(0, newValue) };
@@ -621,7 +783,6 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit {
         if (this.chatComponent) {
           this.chatComponent.sendMessage(message);
         }
-        this.showBeMod = false;
         this.beModValue = 0;
         // Reload characters to update the list
         this.loadCharacters();
@@ -700,6 +861,29 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit {
     }
     const current = character.currentLife ?? 0;
     return Math.max(0, Math.min(100, (current / character.totalLife) * 100));
+  }
+
+  isMyCharacter(character: Character): boolean {
+    return character.ownerId === this.currentUserId;
+  }
+
+  isOwnerOnline(character: Character): boolean {
+    if (!character.ownerId || !this.session?.players) {
+      return false;
+    }
+    // Check if the character owner is in the session players list
+    return this.session.players.some(player => player.id === character.ownerId);
+  }
+
+  getCharacterNameClass(character: Character): string {
+    // Priority: own character (blue) takes precedence over online owner (green)
+    if (this.isMyCharacter(character)) {
+      return 'character-name-own';
+    }
+    if (this.isOwnerOnline(character)) {
+      return 'character-name-online';
+    }
+    return '';
   }
 }
 

@@ -1,8 +1,8 @@
 package de.byedev.dsatable2.dsa_table_backend.web.dto;
 
-import de.byedev.dsatable2.dsa_table_backend.model.Character;
 import de.byedev.dsatable2.dsa_table_backend.model.GameSession;
-import de.byedev.dsatable2.dsa_table_backend.model.User;
+import de.byedev.dsatable2.dsa_table_backend.repository.BattlemapRepository;
+import de.byedev.dsatable2.dsa_table_backend.repository.UserRepository;
 
 import java.time.OffsetDateTime;
 import java.util.Set;
@@ -14,26 +14,39 @@ public class GameSessionDto {
     private String description;
     private UserDto gameMaster;
     private Set<UserDto> players;
-    private Set<Character> characters;
     private OffsetDateTime createdAt;
+    private BattlemapDto battlemap;
 
     public GameSessionDto() {
     }
 
-    public GameSessionDto(GameSession session) {
+    public GameSessionDto(GameSession session, UserRepository userRepository) {
+        this(session, userRepository, null);
+    }
+
+    public GameSessionDto(GameSession session, UserRepository userRepository, BattlemapRepository battlemapRepository) {
         this.id = session.getId();
         this.title = session.getTitle();
         this.description = session.getDescription();
-        if (session.getGameMaster() != null) {
-            this.gameMaster = new UserDto(session.getGameMaster());
+        if (session.getGameMasterId() != null) {
+            userRepository.findById(session.getGameMasterId())
+                    .map(UserDto::new)
+                    .ifPresent(gm -> this.gameMaster = gm);
         }
-        if (session.getPlayers() != null) {
-            this.players = session.getPlayers().stream()
+        if (session.getPlayerIds() != null && !session.getPlayerIds().isEmpty()) {
+            this.players = session.getPlayerIds().stream()
+                    .map(userRepository::findById)
+                    .filter(java.util.Optional::isPresent)
+                    .map(java.util.Optional::get)
                     .map(UserDto::new)
                     .collect(Collectors.toSet());
         }
-        this.characters = session.getCharacters();
         this.createdAt = session.getCreatedAt();
+        if (battlemapRepository != null) {
+            battlemapRepository.findBySessionId(session.getId())
+                    .map(BattlemapDto::new)
+                    .ifPresent(bm -> this.battlemap = bm);
+        }
     }
 
     // Getters and setters
@@ -77,14 +90,6 @@ public class GameSessionDto {
         this.players = players;
     }
 
-    public Set<Character> getCharacters() {
-        return characters;
-    }
-
-    public void setCharacters(Set<Character> characters) {
-        this.characters = characters;
-    }
-
     public OffsetDateTime getCreatedAt() {
         return createdAt;
     }
@@ -93,43 +98,13 @@ public class GameSessionDto {
         this.createdAt = createdAt;
     }
 
-    public static class UserDto {
-        private Long id;
-        private String username;
-        private String displayName;
-
-        public UserDto() {
-        }
-
-        public UserDto(User user) {
-            this.id = user.getId();
-            this.username = user.getUsername();
-            this.displayName = user.getDisplayName();
-        }
-
-        public Long getId() {
-            return id;
-        }
-
-        public void setId(Long id) {
-            this.id = id;
-        }
-
-        public String getUsername() {
-            return username;
-        }
-
-        public void setUsername(String username) {
-            this.username = username;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-
-        public void setDisplayName(String displayName) {
-            this.displayName = displayName;
-        }
+    public BattlemapDto getBattlemap() {
+        return battlemap;
     }
+
+    public void setBattlemap(BattlemapDto battlemap) {
+        this.battlemap = battlemap;
+    }
+
 }
 

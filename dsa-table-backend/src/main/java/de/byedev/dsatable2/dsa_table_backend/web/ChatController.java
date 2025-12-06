@@ -9,6 +9,8 @@ import de.byedev.dsatable2.dsa_table_backend.repository.UserRepository;
 import de.byedev.dsatable2.dsa_table_backend.util.JwtUtil;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.ChatMessageDto;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.ChatMessageRequest;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +42,7 @@ public class ChatController {
 
     @GetMapping
     @Transactional(readOnly = true)
+    @Cacheable(value = "chatMessages", key = "#sessionId")
     public List<ChatMessageDto> getMessages(@PathVariable Long sessionId) {
         return chatMessageRepository.findBySession_IdOrderByCreatedAtAsc(sessionId).stream()
                 .map(ChatMessageDto::new)
@@ -48,6 +51,7 @@ public class ChatController {
 
     @PostMapping
     @Transactional
+    @CacheEvict(value = "chatMessages", key = "#sessionId")
     public ResponseEntity<ChatMessageDto> sendMessage(
             @PathVariable Long sessionId,
             @RequestBody ChatMessageRequest request,
@@ -70,7 +74,11 @@ public class ChatController {
             ChatMessage chatMessage = new ChatMessage(session, author, request.getMessage());
             ChatMessage saved = chatMessageRepository.save(chatMessage);
             
-            return ResponseEntity.ok(new ChatMessageDto(saved));
+            // Reload with relationships to avoid lazy loading issues
+            ChatMessage loaded = chatMessageRepository.findByIdWithRelations(saved.getId())
+                    .orElse(saved);
+            
+            return ResponseEntity.ok(new ChatMessageDto(loaded));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }

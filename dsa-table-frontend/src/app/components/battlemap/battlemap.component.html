@@ -1,0 +1,72 @@
+<div class="battlemap-container">
+  <div class="battlemap-content">
+    <!-- Battlemap Menu Button -->
+    <div class="battlemap-menu">
+      <button class="menu-button" type="button">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+      <div class="menu-dropdown">
+        <button class="menu-item" type="button" [class.active]="isAddingToken" (click)="onAddToken()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="16"></line>
+            <line x1="8" y1="12" x2="16" y2="12"></line>
+          </svg>
+          <span>Add Token</span>
+        </button>
+        <button class="menu-item" type="button" (click)="onConfigureSize()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="9" y1="3" x2="9" y2="21"></line>
+            <line x1="3" y1="9" x2="21" y2="9"></line>
+          </svg>
+          <span>Configure Size</span>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Viewport: handles mouse events and contains the scrollable area -->
+    <div class="map-viewport" #mapViewport [class.token-placement-mode]="isAddingToken">
+      <!-- Token cursor (shown when in placement mode) -->
+      <div class="token-cursor" *ngIf="isAddingToken" [style.width.px]="getGridCellSize()" [style.height.px]="getGridCellSize()"></div>
+      <!-- Canvas: transformable container with all layers -->
+      <div class="map-canvas" #mapCanvas [style.transform]="mapTransform">
+        <!-- Layer 1: Background Image (lowest) -->
+        <div class="map-layer layer-background">
+          <img 
+            [src]="mapImageUrl || placeholderImageUrl" 
+            alt="Battle Map Background" 
+            class="map-image">
+        </div>
+        
+        <!-- Layer 2: Grid Overlay -->
+        <div class="map-layer layer-grid" [style.--cell-size]="gridCellSizePercent + '%'"></div>
+        
+        <!-- Layer 3: GM-only Tokens -->
+        <div class="map-layer layer-tokens layer-gm-tokens">
+          <!-- GM-only tokens will be rendered here -->
+        </div>
+        
+        <!-- Layer 4: Public Tokens (top) -->
+        <div class="map-layer layer-tokens layer-public-tokens">
+          <!-- Public tokens -->
+          <div 
+            *ngFor="let token of tokens" 
+            class="token"
+            [class.token-gm-only]="token.isGmOnly"
+            [class.token-dragging]="isDraggingToken && draggedTokenId === token.id"
+            [style.left.px]="token.x"
+            [style.top.px]="token.y"
+            [style.width.px]="getGridCellSize()"
+            [style.height.px]="getGridCellSize()"
+            (mousedown)="onTokenMouseDown($event, token.id)">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

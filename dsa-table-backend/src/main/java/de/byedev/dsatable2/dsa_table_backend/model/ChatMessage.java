@@ -9,7 +9,8 @@ import java.time.OffsetDateTime;
 public class ChatMessage {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "chat_message_seq")
+    @SequenceGenerator(name = "chat_message_seq", sequenceName = "chat_message_seq", allocationSize = 50)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)

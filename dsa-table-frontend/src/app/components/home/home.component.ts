@@ -6,12 +6,12 @@ import { GameSessionService } from '../../services/game-session.service';
 import { AuthService } from '../../services/auth.service';
 import { Character } from '../../models/character.model';
 import { GameSession } from '../../models/game-session.model';
-import { environment } from '../../../environments/environment';
+import { CharacterCardComponent } from '../character-card/character-card.component';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, CharacterCardComponent],
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss'
 })
@@ -87,17 +87,6 @@ export class HomeComponent implements OnInit {
 
   navigateToSession(id: number): void {
     this.router.navigate(['/sessions', id]);
-  }
-
-  getAvatarUrl(character: Character): string {
-    if (character.avatarUrl && character.avatarUrl.trim() !== '') {
-      // If it's a relative URL, prepend the API base URL
-      if (character.avatarUrl.startsWith('/')) {
-        return `${environment.apiUrl.replace('/api', '')}${character.avatarUrl}`;
-      }
-      return character.avatarUrl;
-    }
-    return `${environment.apiUrl.replace('/api', '')}/api/char`;
   }
 }
 

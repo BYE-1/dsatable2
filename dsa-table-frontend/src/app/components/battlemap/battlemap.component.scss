@@ -1,0 +1,302 @@
+.battlemap-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+  background: #ffffff;
+  border: 2px solid #d9d0c0;
+  border-radius: 12px;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 4px 16px rgba(107, 159, 61, 0.08);
+  overflow: hidden;
+  position: relative;
+}
+
+.battlemap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 2px dashed #d9d0c0;
+  background: rgba(107, 159, 61, 0.08);
+  flex-shrink: 0;
+}
+
+.battlemap-title {
+  margin: 0;
+  color: #2d5016;
+  font-family: 'Caveat', cursive;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.battlemap-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+// Battlemap Menu
+.battlemap-menu {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 1000;
+  pointer-events: none;
+  
+  .menu-button {
+    pointer-events: auto;
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid #d9d0c0;
+    border-radius: 8px;
+    padding: 0.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+    color: #5a4a3a;
+    
+    &:hover {
+      background: rgba(255, 255, 255, 1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transform: translateY(-1px);
+    }
+    
+    &:active {
+      transform: translateY(0);
+    }
+    
+    svg {
+      display: block;
+    }
+  }
+  
+  .menu-dropdown {
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 0;
+    background: rgba(255, 255, 255, 0.98);
+    border: 2px solid #d9d0c0;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    min-width: 180px;
+    padding: 0.25rem;
+    transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
+    transform: translateY(-0.5rem);
+  }
+  
+  &:hover .menu-dropdown {
+    pointer-events: auto;
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+  
+  .menu-item {
+    pointer-events: auto;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #5a4a3a;
+    font-family: 'Kalam', cursive;
+    font-size: 0.9rem;
+    text-align: left;
+    transition: background-color 0.15s ease;
+    
+    &:hover {
+      background: rgba(107, 159, 61, 0.1);
+    }
+    
+    &:active {
+      background: rgba(107, 159, 61, 0.15);
+    }
+    
+    &.active {
+      background: rgba(107, 159, 61, 0.2);
+      font-weight: 600;
+    }
+    
+    svg {
+      flex-shrink: 0;
+      stroke: currentColor;
+    }
+    
+    span {
+      flex: 1;
+    }
+  }
+}
+
+// Viewport: handles mouse events, contains scrollable area
+.map-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: rgba(250, 248, 243, 0.5);
+  cursor: grab;
+  min-width: 0;
+  min-height: 0;
+  
+  &:active {
+    cursor: grabbing;
+  }
+  
+  &.token-placement-mode {
+    cursor: none;
+  }
+}
+
+// Token cursor (follows mouse in placement mode)
+.token-cursor {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid #ffffff;
+  pointer-events: none;
+  z-index: 10000;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  display: block;
+  left: 0;
+  top: 0;
+}
+
+// Canvas: transformable container with all layers
+.map-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 512px; // Default canvas size (will be configurable)
+  height: 512px; // Default canvas size (will be configurable)
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.map-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.layer-background {
+  z-index: 1;
+  pointer-events: none;
+  
+  .map-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #d9d0c0;
+    display: block;
+  }
+}
+
+.layer-grid {
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 8px;
+  background-image: 
+    linear-gradient(to right, rgba(0, 0, 0, 0.15) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.15) 1px, transparent 1px);
+  background-size: var(--cell-size) var(--cell-size);
+}
+
+.layer-tokens {
+  z-index: 3;
+  pointer-events: auto;
+  border-radius: 8px;
+}
+
+.layer-gm-tokens {
+  z-index: 3;
+  // GM-only tokens - visibility will be controlled by user role
+}
+
+.layer-public-tokens {
+  z-index: 4;
+  // Public tokens visible to everyone
+}
+
+// Tokens
+.token {
+  position: absolute;
+  border-radius: 50%;
+  background: #000000;
+  border: 2px solid #ffffff;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+  cursor: grab;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  user-select: none;
+  
+  &:hover {
+    transform: translate(-50%, -50%) scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    z-index: 5;
+  }
+  
+  &:active {
+    cursor: grabbing;
+  }
+  
+  &.token-dragging {
+    z-index: 10;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+    transition: none; // Disable transition during drag for smooth movement
+  }
+  
+  &.token-gm-only {
+    background: #8b0000;
+    border-color: #ff6b6b;
+  }
+}
+
+.map-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #5a4a3a;
+  font-family: 'Kalam', cursive;
+  font-size: 1rem;
+  
+  p {
+    margin: 0;
+  }
+}
+
+// Responsive design
+@media (max-width: 768px) {
+  .battlemap-container {
+    min-height: 100px;
+  }
+  
+  .map-canvas {
+    width: 400px;
+    height: 400px;
+  }
+}

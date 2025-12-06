@@ -66,7 +66,7 @@
         <div *ngFor="let character of characters" class="character-box">
           <img [src]="getAvatarUrl(character)" [alt]="character.name + ' avatar'" [title]="character.name + ' avatar'" class="character-box-avatar">
           <div class="character-box-info">
-            <div class="character-box-name">{{ character.name }}</div>
+            <div class="character-box-name" [ngClass]="getCharacterNameClass(character)">{{ character.name }}</div>
             <div class="character-box-life">
               <div class="life-progress-bar">
                 <div 
@@ -95,7 +95,7 @@
             [class.current-turn]="i === 0">
             <div class="initiative-number">{{ i + 1 }}</div>
             <div class="character-info">
-              <div class="character-name">{{ character.name }}</div>
+              <div class="character-name" [ngClass]="getCharacterNameClass(character)">{{ character.name }}</div>
               <div class="character-stats">
                 <span *ngIf="character.initiative !== undefined" class="stat">
                   Init: {{ character.initiative }}
@@ -115,7 +115,12 @@
         </div>
       </div>
 
-      <!-- Middle - Chat -->
+      <!-- Middle - Battle Map -->
+      <div class="battlemap-area">
+        <app-battlemap [sessionId]="sessionId!" *ngIf="sessionId"></app-battlemap>
+      </div>
+
+      <!-- Right - Chat -->
       <div class="chat-area">
         <app-chat #chatComponent [sessionId]="sessionId!" *ngIf="sessionId"></app-chat>
       </div>
@@ -123,7 +128,6 @@
 
     <!-- Bottom - Dice Roll Menu -->
     <div class="dice-menu">
-      <h3 class="dice-menu-title">Dice Rolls</h3>
       <div class="dice-buttons">
         <button class="dice-btn" (click)="rollDice(20)">
           <span class="dice-icon">🎲</span>
@@ -153,19 +157,24 @@
         <button class="dice-btn" (click)="rollCustomDice()">Roll</button>
       </div>
       <div *ngIf="myCharacter && myCharacter.talents && myCharacter.talents.length > 0" class="talent-roll-panel">
-        <div class="talent-select-wrapper">
+        <div class="talent-select-wrapper" #talentWrapper>
           <input
             type="text"
             [(ngModel)]="talentSearchTerm"
-            (focus)="showTalentDropdown = true; highlightedTalentIndex = -1"
+            (focus)="onTalentInputFocus()"
             (blur)="onTalentInputBlur()"
             (keydown)="onTalentInputKeyDown($event)"
-            (input)="highlightedTalentIndex = -1"
+            (input)="onTalentInputChange()"
             [placeholder]="getSelectedTalentName()"
             class="talent-search-input"
+            #talentInput
             [disabled]="!myCharacter.talents || myCharacter.talents.length === 0"
             title="Search and select a talent">
-          <div *ngIf="showTalentDropdown && getFilteredTalents().length > 0" class="talent-dropdown">
+          <div *ngIf="showTalentDropdown && getFilteredTalents().length > 0" 
+               class="talent-dropdown"
+               [style.left.px]="dropdownPosition.left"
+               [style.bottom.px]="dropdownPosition.bottom"
+               [style.width.px]="dropdownPosition.width">
             <div
               *ngFor="let talent of getFilteredTalents(); let i = index"
               (mousedown)="selectTalent(talent.id!)"
@@ -176,7 +185,11 @@
               <span class="talent-details">({{ talent.check }}) - {{ talent.value }}</span>
             </div>
           </div>
-          <div *ngIf="showTalentDropdown && getFilteredTalents().length === 0 && talentSearchTerm.trim()" class="talent-dropdown">
+          <div *ngIf="showTalentDropdown && getFilteredTalents().length === 0 && talentSearchTerm.trim()" 
+               class="talent-dropdown"
+               [style.left.px]="dropdownPosition.left"
+               [style.bottom.px]="dropdownPosition.bottom"
+               [style.width.px]="dropdownPosition.width">
             <div class="talent-option no-results">No talents found</div>
           </div>
         </div>
@@ -190,82 +203,65 @@
       
       <!-- Character Stat Modifications -->
       <div *ngIf="myCharacter" class="character-stats-panel">
-        <button class="dice-btn stat-btn" (click)="showLifeMod = !showLifeMod">
-          <span class="dice-icon">❤️</span>
-          <span class="dice-label">Life</span>
-        </button>
-        <button class="dice-btn stat-btn" (click)="showAspMod = !showAspMod">
-          <span class="dice-icon">✨</span>
-          <span class="dice-label">ASP</span>
-        </button>
-        <button class="dice-btn stat-btn" (click)="showWoundsMod = !showWoundsMod">
-          <span class="dice-icon">💔</span>
-          <span class="dice-label">Wounds</span>
-        </button>
-        <button class="dice-btn stat-btn" (click)="showBeMod = !showBeMod" [disabled]="!myCharacter.wearingArmour">
-          <span class="dice-icon">🛡️</span>
-          <span class="dice-label">BE</span>
-        </button>
-        <button class="dice-btn stat-btn" (click)="performRest()">
-          <span class="dice-icon">🛌</span>
-          <span class="dice-label">Rest</span>
-        </button>
-      </div>
-
-      <!-- Life Modification Panel -->
-      <div *ngIf="showLifeMod && myCharacter" class="stat-mod-panel">
-        <label>Modify Life (Current: {{ myCharacter.currentLife ?? 0 }})</label>
-        <div class="stat-mod-controls">
+        <!-- Life Controls -->
+        <div class="stat-control-group">
+          <span class="stat-label">❤️ Life:</span>
+          <button class="stat-btn-small" (click)="quickModifyLife(-1)">-</button>
           <input 
             type="number" 
             [(ngModel)]="lifeModValue" 
-            placeholder="Change"
-            class="stat-input">
-          <button class="dice-btn" (click)="modifyLife()">Apply</button>
-          <button class="dice-btn" (click)="showLifeMod = false; lifeModValue = 0">Cancel</button>
+            placeholder="±"
+            class="stat-input-small"
+            (keyup.enter)="modifyLife()">
+          <button class="stat-btn-small" (click)="quickModifyLife(1)">+</button>
+          <button class="stat-btn-apply" (click)="modifyLife()" [disabled]="lifeModValue === 0">Apply</button>
         </div>
-      </div>
-
-      <!-- ASP Modification Panel -->
-      <div *ngIf="showAspMod && myCharacter" class="stat-mod-panel">
-        <label>Modify ASP (Current: {{ myCharacter.currentAsp ?? 0 }})</label>
-        <div class="stat-mod-controls">
+        
+        <!-- ASP Controls -->
+        <div class="stat-control-group">
+          <span class="stat-label">✨ ASP:</span>
+          <button class="stat-btn-small" (click)="quickModifyAsp(-1)">-</button>
           <input 
             type="number" 
             [(ngModel)]="aspModValue" 
-            placeholder="Change"
-            class="stat-input">
-          <button class="dice-btn" (click)="modifyAsp()">Apply</button>
-          <button class="dice-btn" (click)="showAspMod = false; aspModValue = 0">Cancel</button>
+            placeholder="±"
+            class="stat-input-small"
+            (keyup.enter)="modifyAsp()">
+          <button class="stat-btn-small" (click)="quickModifyAsp(1)">+</button>
+          <button class="stat-btn-apply" (click)="modifyAsp()" [disabled]="aspModValue === 0">Apply</button>
         </div>
-      </div>
-
-      <!-- Wounds Modification Panel -->
-      <div *ngIf="showWoundsMod && myCharacter" class="stat-mod-panel">
-        <label>Modify Wounds (Current: {{ myCharacter.wounds ?? 0 }})</label>
-        <div class="stat-mod-controls">
+        
+        <!-- Wounds Controls -->
+        <div class="stat-control-group">
+          <span class="stat-label">💔 Wounds:</span>
           <input 
             type="number" 
-            [(ngModel)]="woundsModValue" 
-            placeholder="Change"
-            class="stat-input">
-          <button class="dice-btn" (click)="modifyWounds()">Apply</button>
-          <button class="dice-btn" (click)="showWoundsMod = false; woundsModValue = 0">Cancel</button>
+            [(ngModel)]="woundsValue" 
+            [placeholder]="myCharacter?.wounds ?? 0"
+            class="stat-input-small"
+            (focus)="onWoundsFocus()"
+            (keyup.enter)="setWounds()"
+            (blur)="setWounds()">
         </div>
-      </div>
-
-      <!-- BE Modification Panel -->
-      <div *ngIf="showBeMod && myCharacter && myCharacter.wearingArmour" class="stat-mod-panel">
-        <label>Modify BE (Current: {{ myCharacter.armourBe ?? 0 }})</label>
-        <div class="stat-mod-controls">
+        
+        <!-- BE Controls -->
+        <div class="stat-control-group" *ngIf="myCharacter.wearingArmour">
+          <span class="stat-label">🛡️ BE:</span>
+          <button class="stat-btn-small" (click)="quickModifyBe(-1)">-</button>
           <input 
             type="number" 
             [(ngModel)]="beModValue" 
-            placeholder="Change"
-            class="stat-input">
-          <button class="dice-btn" (click)="modifyBe()">Apply</button>
-          <button class="dice-btn" (click)="showBeMod = false; beModValue = 0">Cancel</button>
+            placeholder="±"
+            class="stat-input-small"
+            (keyup.enter)="modifyBe()">
+          <button class="stat-btn-small" (click)="quickModifyBe(1)">+</button>
+          <button class="stat-btn-apply" (click)="modifyBe()" [disabled]="beModValue === 0">Apply</button>
         </div>
+        
+        <button class="dice-btn stat-btn-small" (click)="performRest()">
+          <span class="dice-icon">🛌</span>
+          <span class="dice-label">Rest</span>
+        </button>
       </div>
     </div>
   </div>

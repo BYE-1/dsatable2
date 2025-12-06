@@ -1,8 +1,9 @@
 package de.byedev.dsatable2.dsa_table_backend.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.*;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,7 +14,8 @@ import java.util.List;
 public class Advantage {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "advantage_seq")
+    @SequenceGenerator(name = "advantage_seq", sequenceName = "advantage_seq", allocationSize = 50)
     private Long id;
 
     @Column(nullable = false, length = 128)
@@ -25,12 +27,11 @@ public class Advantage {
     @ElementCollection
     @CollectionTable(name = "advantage_additional_texts", joinColumns = @JoinColumn(name = "advantage_id"))
     @Column(name = "additional_text", length = 255)
+    @Fetch(FetchMode.SUBSELECT)
     private List<String> additionalText = new ArrayList<>();
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "character_id")
-    @JsonIgnore
-    private Character character;
+    @Column(name = "character_id")
+    private Long characterId;
 
     public Advantage() {
     }
@@ -79,12 +80,12 @@ public class Advantage {
         this.additionalText = additionalText;
     }
 
-    public Character getCharacter() {
-        return character;
+    public Long getCharacterId() {
+        return characterId;
     }
 
-    public void setCharacter(Character character) {
-        this.character = character;
+    public void setCharacterId(Long characterId) {
+        this.characterId = characterId;
     }
 }
 

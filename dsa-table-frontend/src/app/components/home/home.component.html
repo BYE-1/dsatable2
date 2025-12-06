@@ -18,29 +18,15 @@
           <button class="btn btn-primary" (click)="navigateToCharacters()">Create Character</button>
         </div>
         
-        <ul *ngIf="characters.length > 0" class="item-list">
-          <li *ngFor="let character of characters" class="item-card" (click)="navigateToCharacter(character.id!)">
-            <div class="item-content">
-              <div class="item-avatar">
-                <img [src]="getAvatarUrl(character)" [alt]="character.name + ' avatar'" [title]="character.name + ' avatar'" class="avatar-img-home">
-              </div>
-              <div class="item-info">
-                <h3>{{ character.name }}</h3>
-                <p *ngIf="character.race || character.profession" class="item-meta">
-                  {{ character.race }}<span *ngIf="character.race && character.profession"> • </span>{{ character.profession }}
-                </p>
-              </div>
-            </div>
-            <div class="item-stats" *ngIf="character.currentLife !== undefined || character.currentAsp !== undefined">
-              <span *ngIf="character.currentLife !== undefined" class="stat">
-                <strong>LP:</strong> {{ character.currentLife }}
-              </span>
-              <span *ngIf="character.currentAsp !== undefined" class="stat">
-                <strong>ASP:</strong> {{ character.currentAsp }}
-              </span>
-            </div>
-          </li>
-        </ul>
+        <div *ngIf="characters.length > 0" class="characters-list">
+          <app-character-card 
+            *ngFor="let character of characters" 
+            [character]="character"
+            [showExpandButton]="false"
+            [compact]="true"
+            (characterClick)="navigateToCharacter($event)">
+          </app-character-card>
+        </div>
       </div>
     </div>
 
