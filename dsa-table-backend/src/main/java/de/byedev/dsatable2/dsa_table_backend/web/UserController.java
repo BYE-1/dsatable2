@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/dsatable2/users")
+@RequestMapping("/api/users")
 @CrossOrigin(origins = "*")
 public class UserController {
 
@@ -51,7 +51,7 @@ public class UserController {
         }
         User created = userRepository.save(user);
         return ResponseEntity
-                .created(URI.create("/api/dsatable2/users/" + created.getId()))
+                .created(URI.create("/api/users/" + created.getId()))
                 .body(new UserDto(created));
     }
 

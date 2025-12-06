@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/dsatable2/sessions")
+@RequestMapping("/api/sessions")
 @CrossOrigin(origins = "*")
 public class GameSessionController {
 
