@@ -112,7 +112,7 @@ jobs:
             }
             
             APACHE_ROOT="${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}"
-            DEPLOY_DIR="${APACHE_ROOT}/dsatable2"
+            DEPLOY_DIR="${APACHE_ROOT}"
             
             # Find the tar file (it might be in /tmp or /tmp/dsa-table-frontend)
             TAR_FILE=""
