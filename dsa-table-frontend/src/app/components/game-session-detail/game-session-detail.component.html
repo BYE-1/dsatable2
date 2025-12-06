@@ -237,7 +237,7 @@
           <input 
             type="number" 
             [(ngModel)]="woundsValue" 
-            [placeholder]="myCharacter?.wounds ?? 0"
+            [placeholder]="myCharacter.wounds ?? 0"
             class="stat-input-small"
             (focus)="onWoundsFocus()"
             (keyup.enter)="setWounds()"
