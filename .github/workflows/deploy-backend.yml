@@ -43,6 +43,7 @@ jobs:
           port: ${{ secrets.SERVER_PORT || 22 }}
           source: "dsa-table-backend/deploy/dsa-table-backend.jar"
           target: "/tmp/dsa-table-backend-deploy"
+          strip_components: 2
           rm: true
 
       - name: Execute deployment script on server
@@ -67,19 +68,27 @@ jobs:
             DEPLOY_USER="${{ secrets.SERVER_USER }}"
             DEPLOY_DIR="/tmp/dsa-table-backend-deploy"
             APP_DIR="/opt/dsa-table-backend"
-            JAR_FILE="$DEPLOY_DIR/dsa-table-backend.jar"
+            
+            # Find the JAR file (handle both flat and nested structures)
+            JAR_FILE=""
+            if [ -f "$DEPLOY_DIR/dsa-table-backend.jar" ]; then
+              JAR_FILE="$DEPLOY_DIR/dsa-table-backend.jar"
+            else
+              # Try nested structure
+              JAR_FILE=$(find "$DEPLOY_DIR" -name "dsa-table-backend.jar" -type f | head -1)
+            fi
             
             # Verify JAR file exists
-            if [ ! -f "$JAR_FILE" ]; then
-              echo "Error: JAR file not found at $JAR_FILE"
+            if [ -z "$JAR_FILE" ] || [ ! -f "$JAR_FILE" ]; then
+              echo "Error: JAR file not found"
               echo "Checking deploy directory contents:"
               ls -la "$DEPLOY_DIR" || echo "Deploy directory does not exist"
-              echo "Searching for JAR files in /tmp:"
-              find /tmp -name "*.jar" -type f 2>/dev/null || echo "No JAR files found"
+              echo "Searching for JAR files recursively:"
+              find "$DEPLOY_DIR" -name "*.jar" -type f 2>/dev/null || echo "No JAR files found"
               exit 1
             fi
             
-            echo "Found JAR file: $JAR_FILE ($(du -h $JAR_FILE | cut -f1))"
+            echo "Found JAR file: $JAR_FILE ($(du -h "$JAR_FILE" | cut -f1))"
             
             # Create application directory if it doesn't exist
             run_cmd mkdir -p "$APP_DIR"
