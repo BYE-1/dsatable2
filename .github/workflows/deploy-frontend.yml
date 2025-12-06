@@ -80,6 +80,22 @@ jobs:
             
             APACHE_ROOT="${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}"
             
+            # Find the tar file (it might be in /tmp or /tmp/dsa-table-frontend)
+            TAR_FILE=""
+            if [ -f /tmp/frontend-deploy.tar.gz ]; then
+              TAR_FILE="/tmp/frontend-deploy.tar.gz"
+            elif [ -f /tmp/dsa-table-frontend/frontend-deploy.tar.gz ]; then
+              TAR_FILE="/tmp/dsa-table-frontend/frontend-deploy.tar.gz"
+            else
+              echo "Error: frontend-deploy.tar.gz not found in /tmp"
+              echo "Searching for tar files in /tmp:"
+              find /tmp -name "*.tar.gz" -type f 2>/dev/null || echo "No tar files found"
+              exit 1
+            fi
+            
+            echo "Found tar file: $TAR_FILE"
+            ls -lh "$TAR_FILE" || exit 1
+            
             # Create backup of existing frontend
             if [ -d ${APACHE_ROOT}/dsa-table ]; then
               run_cmd mv ${APACHE_ROOT}/dsa-table ${APACHE_ROOT}/dsa-table.backup.$(date +%Y%m%d_%H%M%S)
@@ -89,8 +105,7 @@ jobs:
             run_cmd mkdir -p ${APACHE_ROOT}/dsa-table
             
             # Extract new files
-            cd /tmp
-            run_cmd tar -xzf frontend-deploy.tar.gz -C ${APACHE_ROOT}/dsa-table
+            run_cmd tar -xzf "$TAR_FILE" -C ${APACHE_ROOT}/dsa-table
             
             # Set proper permissions
             if sudo -n true 2>/dev/null; then
@@ -101,7 +116,8 @@ jobs:
             fi
             
             # Cleanup
-            rm -f /tmp/frontend-deploy.tar.gz
+            rm -f "$TAR_FILE"
+            rm -rf /tmp/dsa-table-frontend 2>/dev/null || true
             
             # Reload Apache (requires sudo)
             if sudo -n true 2>/dev/null; then
