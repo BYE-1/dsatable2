@@ -32,12 +32,35 @@ jobs:
       - name: Update production API URL
         working-directory: dsa-table-frontend
         run: |
-          # Update environment.prod.ts with production API URL
-          sed -i "s|apiUrl: '.*'|apiUrl: '${{ secrets.PRODUCTION_API_URL || 'http://localhost:8080/api' }}'|g" src/environments/environment.prod.ts
+          # Update environment.prod.ts with production API URL (port 8083)
+          # Use PRODUCTION_API_URL secret if set, otherwise construct from SERVER_HOST with port 8083
+          PROD_API_URL="${{ secrets.PRODUCTION_API_URL }}"
+          SERVER_HOST="${{ secrets.SERVER_HOST }}"
+          
+          if [ -n "$PROD_API_URL" ] && [ "$PROD_API_URL" != "" ]; then
+            API_URL="$PROD_API_URL"
+          elif [ -n "$SERVER_HOST" ] && [ "$SERVER_HOST" != "" ]; then
+            # Remove protocol if present and add http:// with port 8083
+            SERVER_HOST=$(echo "$SERVER_HOST" | sed 's|^https\?://||')
+            API_URL="http://${SERVER_HOST}:8083/api"
+          else
+            API_URL="http://localhost:8083/api"
+          fi
+          
+          echo "Setting API URL to: $API_URL"
+          sed -i "s|apiUrl: '.*'|apiUrl: '$API_URL'|g" src/environments/environment.prod.ts
+          # Verify the change
+          grep "apiUrl:" src/environments/environment.prod.ts
+
+      - name: Update base href for production
+        working-directory: dsa-table-frontend
+        run: |
+          # Update base href in index.html to /dsatable2/
+          sed -i 's|<base href="/">|<base href="/dsatable2/">|g' src/index.html
 
       - name: Build Angular application
         working-directory: dsa-table-frontend
-        run: npm run build -- --configuration production
+        run: npm run build -- --configuration production --base-href /dsatable2/
 
       - name: Create deployment archive
         working-directory: dsa-table-frontend
@@ -103,11 +126,19 @@ jobs:
               run_cmd mv "$DEPLOY_DIR" "${DEPLOY_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
             fi
             
-            # Create new directory
+            # Create new directory (remove if exists to avoid nesting)
+            if [ -d "$DEPLOY_DIR" ]; then
+              run_cmd rm -rf "$DEPLOY_DIR"
+            fi
             run_cmd mkdir -p "$DEPLOY_DIR"
             
             # Extract new files directly to the deployment directory
-            run_cmd tar -xzf "$TAR_FILE" -C "$DEPLOY_DIR"
+            # Use --strip-components=0 to extract files directly without preserving any directory structure
+            run_cmd tar -xzf "$TAR_FILE" -C "$DEPLOY_DIR" --strip-components=0
+            
+            # Debug: List what was extracted
+            echo "Contents of $DEPLOY_DIR after extraction:"
+            ls -la "$DEPLOY_DIR" | head -20
             
             # Set proper permissions
             if sudo -n true 2>/dev/null; then
@@ -122,8 +153,26 @@ jobs:
               echo "✓ index.html found at $DEPLOY_DIR/index.html"
             else
               echo "✗ Warning: index.html not found at $DEPLOY_DIR/index.html"
+              echo "Searching for index.html:"
+              find "$DEPLOY_DIR" -name "index.html" -type f 2>/dev/null || echo "index.html not found"
               echo "Contents of $DEPLOY_DIR:"
               ls -la "$DEPLOY_DIR" || echo "Directory does not exist"
+              # If index.html is in a subdirectory, move files up one level
+              if [ -f "$DEPLOY_DIR/dsatable2/index.html" ]; then
+                echo "Moving files from nested directory..."
+                run_cmd mv "$DEPLOY_DIR/dsatable2"/* "$DEPLOY_DIR/" 2>/dev/null || true
+                run_cmd rmdir "$DEPLOY_DIR/dsatable2" 2>/dev/null || true
+              fi
+            fi
+            
+            # Verify base href in index.html
+            if [ -f "$DEPLOY_DIR/index.html" ]; then
+              if grep -q 'base href="/dsatable2/"' "$DEPLOY_DIR/index.html"; then
+                echo "✓ Base href is correctly set to /dsatable2/"
+              else
+                echo "⚠ Warning: Base href might not be set correctly"
+                grep -i 'base href' "$DEPLOY_DIR/index.html" || echo "No base href found"
+              fi
             fi
             
             # Cleanup
