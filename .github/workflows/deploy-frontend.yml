@@ -44,6 +44,12 @@ jobs:
         run: |
           cd dist/dsa-table-frontend
           tar -czf ../../frontend-deploy.tar.gz .
+          # Verify the archive was created
+          ls -lh ../../frontend-deploy.tar.gz || exit 1
+
+      - name: Verify archive exists
+        run: |
+          ls -lh dsa-table-frontend/frontend-deploy.tar.gz || exit 1
 
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
@@ -52,7 +58,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
-          source: "frontend-deploy.tar.gz"
+          source: "dsa-table-frontend/frontend-deploy.tar.gz"
           target: "/tmp"
 
       - name: Extract and deploy frontend files
