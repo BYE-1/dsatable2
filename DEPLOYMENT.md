@@ -20,7 +20,59 @@ sudo apt install openjdk-21-jdk
 java -version  # Verify installation
 ```
 
-### 2. Set Up Backend Service
+### 2. Configure Passwordless Sudo (Required for GitHub Actions)
+
+The deployment workflows need passwordless sudo access. Choose one of these options:
+
+**Option A: Specific Commands Only (Recommended - More Secure)**
+
+```bash
+# Copy the script to your server
+scp deployment/configure-passwordless-sudo.sh user@your-server:/tmp/
+ssh user@your-server
+cd /tmp
+chmod +x configure-passwordless-sudo.sh
+sudo ./configure-passwordless-sudo.sh
+```
+
+This allows only the specific commands needed for deployment.
+
+**Option B: All Commands (Less Secure but Simpler)**
+
+```bash
+# Copy the script to your server
+scp deployment/configure-sudo-alternative.sh user@your-server:/tmp/
+ssh user@your-server
+cd /tmp
+chmod +x configure-sudo-alternative.sh
+sudo ./configure-sudo-alternative.sh
+```
+
+This allows all sudo commands without password (use only if you fully trust the deployment user).
+
+**Option C: Manual Configuration**
+
+Edit sudoers file:
+```bash
+sudo visudo -f /etc/sudoers.d/dsa-table-deploy
+```
+
+Add:
+```
+your-deploy-user ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dsa-table-backend.service
+your-deploy-user ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload apache2
+your-deploy-user ALL=(ALL) NOPASSWD: /bin/mkdir -p /opt/dsa-table-backend
+your-deploy-user ALL=(ALL) NOPASSWD: /bin/cp /tmp/dsa-table-backend-deploy/* /opt/dsa-table-backend/*
+# ... add other commands as needed
+```
+
+**Verify Configuration:**
+```bash
+sudo -n true
+# Should return without error if passwordless sudo is working
+```
+
+### 3. Set Up Backend Service
 
 Run the server setup script on your server:
 
@@ -38,7 +90,7 @@ This creates a systemd service for the Spring Boot backend that will:
 - Restart automatically if it crashes
 - Log to systemd journal
 
-### 3. Configure Apache
+### 4. Configure Apache
 
 1. Install required Apache modules:
 
@@ -73,7 +125,7 @@ sudo a2ensite dsa-table.conf
 sudo systemctl reload apache2
 ```
 
-### 4. Create Production Configuration
+### 5. Create Production Configuration
 
 1. Create config directory:
 
@@ -225,6 +277,29 @@ sudo tail -f /var/log/apache2/dsa-table-access.log
 ```
 
 ## Troubleshooting
+
+### GitHub Actions: "sudo: a password is required"
+
+**Problem:** The deployment workflow fails with sudo password errors.
+
+**Solution:** Configure passwordless sudo on your server:
+
+```bash
+# On your server, run:
+sudo ./deployment/configure-passwordless-sudo.sh
+
+# Or manually add to sudoers:
+sudo visudo -f /etc/sudoers.d/dsa-table-deploy
+# Add: your-user ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dsa-table-backend.service
+# Add: your-user ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload apache2
+# ... (see configure-passwordless-sudo.sh for full list)
+```
+
+**Verify it works:**
+```bash
+sudo -n true
+# Should return without error
+```
 
 ### Backend won't start
 

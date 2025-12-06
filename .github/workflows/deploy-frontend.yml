@@ -61,25 +61,44 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
+            # Function to run command with sudo if needed
+            run_cmd() {
+              if sudo -n true 2>/dev/null; then
+                sudo "$@"
+              else
+                "$@"
+              fi
+            }
+            
+            APACHE_ROOT="${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}"
+            
             # Create backup of existing frontend
-            if [ -d ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table ]; then
-              sudo mv ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table.backup.$(date +%Y%m%d_%H%M%S)
+            if [ -d ${APACHE_ROOT}/dsa-table ]; then
+              run_cmd mv ${APACHE_ROOT}/dsa-table ${APACHE_ROOT}/dsa-table.backup.$(date +%Y%m%d_%H%M%S)
             fi
             
             # Create new directory
-            sudo mkdir -p ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table
+            run_cmd mkdir -p ${APACHE_ROOT}/dsa-table
             
             # Extract new files
             cd /tmp
-            sudo tar -xzf frontend-deploy.tar.gz -C ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table
+            run_cmd tar -xzf frontend-deploy.tar.gz -C ${APACHE_ROOT}/dsa-table
             
             # Set proper permissions
-            sudo chown -R www-data:www-data ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table
-            sudo chmod -R 755 ${{ secrets.APACHE_DOCUMENT_ROOT || '/var/www/html' }}/dsa-table
+            if sudo -n true 2>/dev/null; then
+              sudo chown -R www-data:www-data ${APACHE_ROOT}/dsa-table
+              sudo chmod -R 755 ${APACHE_ROOT}/dsa-table
+            else
+              echo "Warning: Cannot set permissions without passwordless sudo"
+            fi
             
             # Cleanup
             rm -f /tmp/frontend-deploy.tar.gz
             
-            # Reload Apache
-            sudo systemctl reload apache2
+            # Reload Apache (requires sudo)
+            if sudo -n true 2>/dev/null; then
+              sudo systemctl reload apache2
+            else
+              echo "Warning: Cannot reload Apache without passwordless sudo. Please reload manually: sudo systemctl reload apache2"
+            fi
 

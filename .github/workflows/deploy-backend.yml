@@ -53,20 +53,38 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
+            # Function to run command with sudo if needed
+            run_cmd() {
+              if sudo -n true 2>/dev/null; then
+                sudo "$@"
+              else
+                "$@"
+              fi
+            }
+            
             # Create application directory if it doesn't exist
-            sudo mkdir -p /opt/dsa-table-backend
+            run_cmd mkdir -p /opt/dsa-table-backend
+            
+            # Set ownership if using sudo
+            if sudo -n true 2>/dev/null; then
+              sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} /opt/dsa-table-backend 2>/dev/null || true
+            fi
             
             # Backup existing JAR if it exists
             if [ -f /opt/dsa-table-backend/dsa-table-backend.jar ]; then
-              sudo cp /opt/dsa-table-backend/dsa-table-backend.jar /opt/dsa-table-backend/dsa-table-backend.jar.backup.$(date +%Y%m%d_%H%M%S)
+              run_cmd cp /opt/dsa-table-backend/dsa-table-backend.jar /opt/dsa-table-backend/dsa-table-backend.jar.backup.$(date +%Y%m%d_%H%M%S)
             fi
             
             # Copy new JAR
-            sudo cp /tmp/dsa-table-backend-deploy/dsa-table-backend.jar /opt/dsa-table-backend/
-            sudo chown ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} /opt/dsa-table-backend/dsa-table-backend.jar
+            run_cmd cp /tmp/dsa-table-backend-deploy/dsa-table-backend.jar /opt/dsa-table-backend/
+            run_cmd chown ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} /opt/dsa-table-backend/dsa-table-backend.jar
             
-            # Restart service
-            sudo systemctl restart dsa-table-backend.service || echo "Service not found, you may need to create it"
+            # Restart service (requires sudo)
+            if sudo -n true 2>/dev/null; then
+              sudo systemctl restart dsa-table-backend.service || echo "Service not found, you may need to create it"
+            else
+              echo "Warning: Cannot restart service without passwordless sudo. Please restart manually: sudo systemctl restart dsa-table-backend.service"
+            fi
             
             # Cleanup
             rm -rf /tmp/dsa-table-backend-deploy
@@ -80,5 +98,10 @@ jobs:
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
             sleep 5
-            sudo systemctl status dsa-table-backend.service --no-pager || echo "Service status check failed"
+            if sudo -n true 2>/dev/null; then
+              sudo systemctl status dsa-table-backend.service --no-pager || echo "Service status check failed"
+            else
+              echo "Skipping service status check (passwordless sudo not configured)"
+              echo "Please check manually: sudo systemctl status dsa-table-backend.service"
+            fi
 

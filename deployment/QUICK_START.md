@@ -9,6 +9,11 @@
 sudo apt update
 sudo apt install openjdk-21-jdk
 
+# Configure passwordless sudo (REQUIRED for GitHub Actions)
+chmod +x configure-passwordless-sudo.sh
+sudo ./configure-passwordless-sudo.sh
+# Or use configure-sudo-alternative.sh for full sudo access (less secure)
+
 # Run server setup script
 chmod +x server-setup.sh
 sudo ./server-setup.sh
