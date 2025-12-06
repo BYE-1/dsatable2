@@ -10,7 +10,7 @@ import java.awt.*;
 import java.util.Arrays;
 
 @RestController
-@RequestMapping("/api/char")
+@RequestMapping("/api/dsatable2/char")
 public class CharacterImageController {
 
     public static final String PARAM_HAIR = "hair";

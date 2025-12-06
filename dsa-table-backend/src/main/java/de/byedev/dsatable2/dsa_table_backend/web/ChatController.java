@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/sessions/{sessionId}/chat")
+@RequestMapping("/api/dsatable2/sessions/{sessionId}/chat")
 @CrossOrigin(origins = "*")
 public class ChatController {
 

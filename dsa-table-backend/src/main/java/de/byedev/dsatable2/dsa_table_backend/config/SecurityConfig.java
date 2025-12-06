@@ -51,9 +51,9 @@ public class SecurityConfig {
                 // Configure authorization
                 .authorizeHttpRequests(auth -> auth
                         // Allow public access to auth endpoints
-                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/dsatable2/auth/**").permitAll()
                         // Allow character image generation (public endpoint)
-                        .requestMatchers("/api/char/**").permitAll()
+                        .requestMatchers("/api/dsatable2/char/**").permitAll()
                         // Allow Swagger UI and API docs
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
                         // Allow H2 console (for development)
@@ -61,7 +61,7 @@ public class SecurityConfig {
                         // Allow static resources
                         .requestMatchers("/static/**", "/favicon.ico").permitAll()
                         // Require authentication for all other API endpoints
-                        .requestMatchers("/api/**").authenticated()
+                        .requestMatchers("/api/dsatable2/**").authenticated()
                         // Allow everything else (for now)
                         .anyRequest().permitAll()
                 )

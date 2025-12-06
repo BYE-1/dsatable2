@@ -42,9 +42,9 @@ jobs:
           elif [ -n "$SERVER_HOST" ] && [ "$SERVER_HOST" != "" ]; then
             # Remove protocol if present and add http:// with port 8083
             SERVER_HOST=$(echo "$SERVER_HOST" | sed 's|^https\?://||')
-            API_URL="http://${SERVER_HOST}:8083/api"
+            API_URL="http://${SERVER_HOST}:8083/api/dsatable2"
           else
-            API_URL="http://localhost:8083/api"
+            API_URL="http://localhost:8083/api/dsatable2"
           fi
           
           echo "Setting API URL to: $API_URL"

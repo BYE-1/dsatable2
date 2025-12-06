@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/dsatable2/auth")
 @CrossOrigin(origins = "*")
 public class AuthController {
 
