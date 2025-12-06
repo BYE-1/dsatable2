@@ -9,9 +9,10 @@ import de.byedev.dsatable2.dsa_table_backend.repository.UserRepository;
 import de.byedev.dsatable2.dsa_table_backend.util.JwtUtil;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.ChatMessageDto;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.ChatMessageRequest;
+import de.byedev.dsatable2.dsa_table_backend.web.exception.ResourceNotFoundException;
+import de.byedev.dsatable2.dsa_table_backend.web.exception.UnauthorizedException;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -58,30 +59,26 @@ public class ChatController {
             @RequestHeader("Authorization") String authHeader) {
         
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            throw new UnauthorizedException("Authentication required. Please provide a valid Bearer token.");
         }
 
-        try {
-            String token = authHeader.substring(7);
-            String username = jwtUtil.extractUsername(token);
-            
-            User author = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new RuntimeException("User not found"));
-            
-            GameSession session = gameSessionRepository.findById(sessionId)
-                    .orElseThrow(() -> new RuntimeException("Session not found"));
+        String token = authHeader.substring(7);
+        String username = jwtUtil.extractUsername(token);
+        
+        User author = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "username", username));
+        
+        GameSession session = gameSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("GameSession", "id", sessionId));
 
-            ChatMessage chatMessage = new ChatMessage(session, author, request.getMessage());
-            ChatMessage saved = chatMessageRepository.save(chatMessage);
-            
-            // Reload with relationships to avoid lazy loading issues
-            ChatMessage loaded = chatMessageRepository.findByIdWithRelations(saved.getId())
-                    .orElse(saved);
-            
-            return ResponseEntity.ok(new ChatMessageDto(loaded));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-        }
+        ChatMessage chatMessage = new ChatMessage(session, author, request.getMessage());
+        ChatMessage saved = chatMessageRepository.save(chatMessage);
+        
+        // Reload with relationships to avoid lazy loading issues
+        ChatMessage loaded = chatMessageRepository.findByIdWithRelations(saved.getId())
+                .orElse(saved);
+        
+        return ResponseEntity.ok(new ChatMessageDto(loaded));
     }
 }
 
