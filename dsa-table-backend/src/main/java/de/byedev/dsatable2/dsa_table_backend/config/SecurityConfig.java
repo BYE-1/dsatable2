@@ -103,9 +103,11 @@ public class SecurityConfig {
                 "http://localhost:4200",  // Angular dev server
                 "http://localhost:3000",   // Alternative dev port
                 "http://127.0.0.1:4200",
-                "http://127.0.0.1:3000"
-                // Add your production Angular app URL here when deploying
-                // "https://your-angular-app.com"
+                "http://127.0.0.1:3000",
+                "https://byedev.de",        // Production domain
+                "https://www.byedev.de",    // Production domain with www
+                "http://byedev.de",         // Production domain (HTTP)
+                "http://www.byedev.de"      // Production domain with www (HTTP)
         ));
         
         // Allow common HTTP methods
