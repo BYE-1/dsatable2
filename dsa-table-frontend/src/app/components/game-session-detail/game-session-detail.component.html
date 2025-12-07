@@ -43,68 +43,41 @@
   </div>
 
   <div *ngIf="!loading && !error && session && !showCharacterSelection" class="session-layout">
-    <!-- Top Header -->
-    <div class="session-header">
-      <div class="header-content">
-        <h1 class="session-title">{{ session.title }}</h1>
-        <div class="session-users">
-          <div class="user-group" *ngIf="session.gameMaster">
-            <span class="user-label">GM:</span>
-            <span class="user-name">{{ session.gameMaster.displayName }}</span>
-          </div>
-          <div class="user-group" *ngIf="session.players && session.players.length > 0">
-            <span class="user-label">Players:</span>
-            <span class="user-list">
-              <span *ngFor="let player of session.players; let last = last">
-                {{ player.displayName }}<span *ngIf="!last">, </span>
-              </span>
-            </span>
-          </div>
-        </div>
-      </div>
-      <div class="header-characters" *ngIf="characters.length > 0">
-        <div *ngFor="let character of characters" class="character-box">
-          <img [src]="getAvatarUrl(character)" [alt]="character.name + ' avatar'" [title]="character.name + ' avatar'" class="character-box-avatar">
-          <div class="character-box-info">
-            <div class="character-box-name" [ngClass]="getCharacterNameClass(character)">{{ character.name }}</div>
-            <div class="character-box-life">
-              <div class="life-progress-bar">
-                <div 
-                  class="life-progress-fill" 
-                  [style.width.%]="getLifePercentage(character)"
-                  [class.life-low]="getLifePercentage(character) < 25"
-                  [class.life-medium]="getLifePercentage(character) >= 25 && getLifePercentage(character) < 50">
-                </div>
-              </div>
-              <span class="life-text">{{ character.currentLife ?? 0 }}/{{ character.totalLife ?? character.currentLife ?? 0 }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Main Content Area -->
     <div class="session-main">
       <!-- Left Sidebar - Characters by Initiative -->
       <div class="characters-sidebar">
-        <h2 class="sidebar-title">Initiative Order</h2>
+        <h2 class="sidebar-title">{{ session.title }}</h2>
         <div class="characters-list">
           <div 
             *ngFor="let character of characters; let i = index" 
             class="character-initiative-item"
-            [class.current-turn]="i === 0">
-            <div class="initiative-number">{{ i + 1 }}</div>
+            [class.current-turn]="i === 0"
+            [title]="getCharacterOwnerName(character) ? 'Owner: ' + getCharacterOwnerName(character) : ''">
+            <div class="initiative-number">{{ character.initiative ?? '' }}</div>
+            <img 
+              [src]="getAvatarUrl(character)" 
+              [alt]="character.name + ' avatar'" 
+              [title]="character.name + ' avatar'" 
+              class="character-initiative-avatar"
+              draggable="true"
+              (dragstart)="onCharacterDragStart($event, character)"
+              (dragend)="onCharacterDragEnd($event)">
             <div class="character-info">
               <div class="character-name" [ngClass]="getCharacterNameClass(character)">{{ character.name }}</div>
-              <div class="character-stats">
-                <span *ngIf="character.initiative !== undefined" class="stat">
-                  Init: {{ character.initiative }}
-                </span>
-                <span *ngIf="character.currentLife !== undefined" class="stat life">
-                  LP: {{ character.currentLife }}
-                </span>
-                <span *ngIf="character.currentAsp !== undefined" class="stat asp">
-                  ASP: {{ character.currentAsp }}
+              <div class="character-life">
+                <div class="life-progress-bar">
+                  <div 
+                    class="life-progress-fill"
+                    [ngClass]="{
+                      'life-low': getLifePercentage(character) < 33,
+                      'life-medium': getLifePercentage(character) >= 33 && getLifePercentage(character) < 66
+                    }"
+                    [style.width.%]="getLifePercentage(character)">
+                  </div>
+                </div>
+                <span class="life-text">
+                  {{ character.currentLife ?? 0 }}/{{ character.totalLife ?? 0 }}
                 </span>
               </div>
             </div>

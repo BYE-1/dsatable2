@@ -1,7 +1,6 @@
 package de.byedev.dsatable2.dsa_table_backend.web.dto;
 
 import de.byedev.dsatable2.dsa_table_backend.model.Battlemap;
-import de.byedev.dsatable2.dsa_table_backend.model.BattlemapToken;
 
 import java.util.List;
 import java.util.stream.Collectors;

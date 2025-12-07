@@ -30,11 +30,17 @@
     </div>
     
     <!-- Viewport: handles mouse events and contains the scrollable area -->
-    <div class="map-viewport" #mapViewport [class.token-placement-mode]="isAddingToken">
+    <div 
+      class="map-viewport" 
+      #mapViewport 
+      [class.token-placement-mode]="isAddingToken"
+      (dragover)="onDragOver($event)"
+      (drop)="onDrop($event)"
+      (dragleave)="onDragLeave($event)">
       <!-- Token cursor (shown when in placement mode) -->
-      <div class="token-cursor" *ngIf="isAddingToken" [style.width.px]="getGridCellSize()" [style.height.px]="getGridCellSize()"></div>
+      <div class="token-cursor" *ngIf="isAddingToken" [style.width.px]="getTokenSize()" [style.height.px]="getTokenSize()"></div>
       <!-- Canvas: transformable container with all layers -->
-      <div class="map-canvas" #mapCanvas [style.transform]="mapTransform">
+      <div class="map-canvas" #mapCanvas [style.transform]="mapTransform" [style.width.px]="baseCanvasWidth" [style.height.px]="baseCanvasHeight">
         <!-- Layer 1: Background Image (lowest) -->
         <div class="map-layer layer-background">
           <img 
@@ -59,11 +65,17 @@
             class="token"
             [class.token-gm-only]="token.isGmOnly"
             [class.token-dragging]="isDraggingToken && draggedTokenId === token.id"
+            [class.token-with-avatar]="token.avatarUrl"
             [style.left.px]="token.x"
             [style.top.px]="token.y"
-            [style.width.px]="getGridCellSize()"
-            [style.height.px]="getGridCellSize()"
+            [style.width.px]="getTokenSize()"
+            [style.height.px]="getTokenSize()"
             (mousedown)="onTokenMouseDown($event, token.id)">
+            <img 
+              *ngIf="token.avatarUrl" 
+              [src]="token.avatarUrl" 
+              [alt]="'Token avatar'"
+              class="token-avatar">
           </div>
         </div>
       </div>

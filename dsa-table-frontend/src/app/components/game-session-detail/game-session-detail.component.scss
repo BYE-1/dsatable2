@@ -307,6 +307,28 @@
   }
 }
 
+.character-initiative-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(139, 117, 80, 0.3);
+  object-fit: cover;
+  flex-shrink: 0;
+  background: transparent;
+  cursor: grab;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+
+  &:hover {
+    transform: scale(1.1);
+    border-color: rgba(139, 117, 80, 0.6);
+  }
+
+  &:active {
+    cursor: grabbing;
+    opacity: 0.7;
+  }
+}
+
 .character-info {
   flex: 1;
   min-width: 0;
@@ -328,6 +350,20 @@
   &.character-name-online {
     color: #28a745;
   }
+}
+
+.character-life {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.life-text {
+  font-size: 0.75rem;
+  color: #8b7550;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .character-stats {

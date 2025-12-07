@@ -6,13 +6,14 @@ import { GameSessionService } from '../../services/game-session.service';
 import { CharacterService } from '../../services/character.service';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
+import { UserService } from '../../services/user.service';
 import { GameSession } from '../../models/game-session.model';
 import { Character } from '../../models/character.model';
 import { ChatComponent } from '../chat/chat.component';
 import { BattlemapComponent } from '../battlemap/battlemap.component';
 import { environment } from '../../../environments/environment';
-import { Subscription, interval } from 'rxjs';
-import { switchMap, startWith } from 'rxjs/operators';
+import { Subscription, interval, forkJoin, of } from 'rxjs';
+import { switchMap, startWith, map, catchError } from 'rxjs/operators';
 
 @Component({
   selector: 'app-game-session-detail',
@@ -46,6 +47,9 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
   private charactersPollingSubscription?: Subscription;
   private sessionPollingSubscription?: Subscription;
   
+  // Owner information cache
+  private ownerNames: Map<number, string> = new Map();
+  
   // Talent rolling
   selectedTalentId: number | null = null;
   talentSearchTerm: string = '';
@@ -70,7 +74,8 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
     private gameSessionService: GameSessionService,
     private characterService: CharacterService,
     private chatService: ChatService,
-    private authService: AuthService
+    private authService: AuthService,
+    private userService: UserService
   ) {}
 
   ngOnInit(): void {
@@ -123,6 +128,8 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
             }
             return (a.name || '').localeCompare(b.name || '');
           });
+          // Load owner names for any new characters
+          this.loadOwnerNames(this.characters);
         } else {
           // Even if IDs are the same, update data in case stats changed
           // Merge updates to preserve any local state
@@ -132,6 +139,15 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
               // Update properties but preserve order
               Object.assign(existing, newChar);
             }
+          });
+          // Re-sort in case initiative values changed
+          this.characters.sort((a, b) => {
+            const initA = a.initiative ?? 0;
+            const initB = b.initiative ?? 0;
+            if (initA !== initB) {
+              return initB - initA;
+            }
+            return (a.name || '').localeCompare(b.name || '');
           });
         }
       },
@@ -155,6 +171,11 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
         
         if (currentPlayerIds !== newPlayerIds) {
           this.session = data;
+          // When players list changes, immediately reload characters
+          // as a new player might have joined with a character
+          this.loadCharacters();
+          // Also reload owner names for new characters
+          this.loadOwnerNames(this.characters);
         } else {
           // Update session data but preserve structure
           if (this.session) {
@@ -206,8 +227,13 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
 
     this.characterService.getAllCharacters(undefined, this.sessionId).subscribe({
       next: (data: Character[]) => {
+        // Check if characters have actually changed before updating
+        const currentIds = this.characters.map(c => c.id).sort().join(',');
+        const newIds = data.map(c => c.id).sort().join(',');
+        const hasChanged = currentIds !== newIds || this.characters.length !== data.length;
+        
         // Sort by initiative (descending), then by name
-        this.characters = data.sort((a, b) => {
+        const sortedData = data.sort((a, b) => {
           const initA = a.initiative ?? 0;
           const initB = b.initiative ?? 0;
           if (initA !== initB) {
@@ -215,9 +241,76 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
           }
           return (a.name || '').localeCompare(b.name || '');
         });
+        
+        if (hasChanged) {
+          // Replace entire array if characters changed
+          this.characters = sortedData;
+        } else {
+          // Update existing characters in place to preserve any local state
+          sortedData.forEach(newChar => {
+            const existing = this.characters.find(c => c.id === newChar.id);
+            if (existing) {
+              Object.assign(existing, newChar);
+            }
+          });
+          // Re-sort in case initiative values changed
+          this.characters.sort((a, b) => {
+            const initA = a.initiative ?? 0;
+            const initB = b.initiative ?? 0;
+            if (initA !== initB) {
+              return initB - initA;
+            }
+            return (a.name || '').localeCompare(b.name || '');
+          });
+        }
+        
+        // Load owner information for characters
+        this.loadOwnerNames(this.characters);
       },
       error: (err: any) => {
         console.error('Error loading characters:', err);
+      }
+    });
+  }
+
+  loadOwnerNames(characters: Character[]): void {
+    // Get unique owner IDs
+    const ownerIds = new Set<number>();
+    characters.forEach(char => {
+      if (char.ownerId) {
+        ownerIds.add(char.ownerId);
+      }
+    });
+
+    // Remove IDs we already have
+    ownerIds.forEach(id => {
+      if (this.ownerNames.has(id)) {
+        ownerIds.delete(id);
+      }
+    });
+
+    if (ownerIds.size === 0) {
+      return;
+    }
+
+    // Fetch all owners in parallel
+    const ownerRequests = Array.from(ownerIds).map(id =>
+      this.userService.getUserById(id).pipe(
+        map(user => ({ id, displayName: user.displayName })),
+        catchError(() => of({ id, displayName: '' }))
+      )
+    );
+
+    forkJoin(ownerRequests).subscribe({
+      next: (owners) => {
+        owners.forEach(owner => {
+          if (owner.displayName) {
+            this.ownerNames.set(owner.id, owner.displayName);
+          }
+        });
+      },
+      error: (err) => {
+        console.error('Error loading owner names:', err);
       }
     });
   }
@@ -884,6 +977,48 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
       return 'character-name-online';
     }
     return '';
+  }
+
+  getCharacterOwnerName(character: Character): string {
+    if (!character.ownerId) {
+      return '';
+    }
+    // First check the session players (for active players)
+    if (this.session?.players) {
+      const owner = this.session.players.find(p => p.id === character.ownerId);
+      if (owner?.displayName) {
+        return owner.displayName;
+      }
+    }
+    // Then check the cached owner names
+    return this.ownerNames.get(character.ownerId) || '';
+  }
+
+  onCharacterDragStart(event: DragEvent, character: Character): void {
+    if (!event.dataTransfer || !character.id) return;
+    
+    // Store character data in the drag event
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData('application/json', JSON.stringify({
+      characterId: character.id,
+      characterName: character.name,
+      avatarUrl: this.getAvatarUrl(character)
+    }));
+    
+    // Create a custom drag image (optional - can use the avatar itself)
+    if (event.target instanceof HTMLImageElement) {
+      const dragImage = event.target.cloneNode(true) as HTMLImageElement;
+      dragImage.style.width = '40px';
+      dragImage.style.height = '40px';
+      dragImage.style.opacity = '0.8';
+      document.body.appendChild(dragImage);
+      event.dataTransfer.setDragImage(dragImage, 20, 20);
+      setTimeout(() => document.body.removeChild(dragImage), 0);
+    }
+  }
+
+  onCharacterDragEnd(event: DragEvent): void {
+    // Cleanup if needed
   }
 }
 

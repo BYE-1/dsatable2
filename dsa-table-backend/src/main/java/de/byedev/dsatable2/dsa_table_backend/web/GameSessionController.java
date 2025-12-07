@@ -79,10 +79,34 @@ public class GameSessionController {
     @PostMapping
     @Transactional
     @CacheEvict(value = "gameSessions", allEntries = true)
-    public ResponseEntity<GameSessionDto> create(@RequestBody GameSession session) {
+    public ResponseEntity<GameSessionDto> create(
+            @RequestBody GameSession session,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        
         if (session.getId() != null) {
             return ResponseEntity.badRequest().build();
         }
+
+        // Extract authenticated user and set as GM
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).build();
+        }
+
+        String token = authHeader.substring(7);
+        String username = jwtUtil.extractUsername(token);
+        if (username == null) {
+            return ResponseEntity.status(401).build();
+        }
+
+        User user = userRepository.findByUsername(username).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(401).build();
+        }
+
+        // Set the creator as the game master (ignore any gameMasterId from request)
+        session.setGameMasterId(user.getId());
+        // Ensure no players are set during creation
+        session.setPlayerIds(new java.util.HashSet<>());
 
         GameSession created = gameSessionRepository.save(session);
         return ResponseEntity
@@ -163,6 +187,31 @@ public class GameSessionController {
         // Verify character belongs to user
         if (character.getOwnerId() == null || !character.getOwnerId().equals(userId)) {
             return ResponseEntity.status(403).build();
+        }
+
+        // Check if user already has a character in this session
+        List<Character> userCharacters = characterRepository.findByOwnerId(userId);
+        Character existingCharacter = userCharacters.stream()
+                .filter(c -> c.getSessionId() != null && c.getSessionId().equals(session.getId()))
+                .findFirst()
+                .orElse(null);
+
+        if (existingCharacter != null) {
+            // User already has a character in this session
+            // If it's the same character, just ensure they're in the players list
+            if (existingCharacter.getId().equals(characterId)) {
+                // Character already assigned, just ensure user is in players list
+                if (!session.getPlayerIds().contains(userId)) {
+                    session.getPlayerIds().add(userId);
+                    gameSessionRepository.save(session);
+                }
+                return ResponseEntity.ok(new GameSessionDto(session, userRepository, battlemapRepository));
+            } else {
+                // User is trying to assign a different character
+                // Reassign: remove sessionId from old character, assign to new one
+                existingCharacter.setSessionId(null);
+                characterRepository.save(existingCharacter);
+            }
         }
 
         // Assign character to session

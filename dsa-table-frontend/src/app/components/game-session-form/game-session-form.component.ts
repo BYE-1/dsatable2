@@ -77,9 +77,10 @@ export class GameSessionFormComponent implements OnInit {
       this.loading = true;
       this.error = null;
 
+      // Only send title and description - backend will set GM from authenticated user
       const sessionData: GameSession = {
-        ...this.sessionForm.value,
-        gameMaster: this.currentUserId ? { id: this.currentUserId } : undefined
+        title: this.sessionForm.value.title,
+        description: this.sessionForm.value.description
       };
 
       const request = this.isEditMode && this.sessionId

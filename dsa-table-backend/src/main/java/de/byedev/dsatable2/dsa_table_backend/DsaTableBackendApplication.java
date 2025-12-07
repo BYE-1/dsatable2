@@ -68,15 +68,37 @@ public class DsaTableBackendApplication {
 				s.setTitle(sessionTitle);
 				s.setDescription("Demo game session seeded on startup");
 				s.setGameMasterId(user.getId());
+				s.setPlayerIds(new java.util.HashSet<>());
 				GameSession saved = gameSessionRepository.save(s);
 				LOG.info("Created demo session '{}'", sessionTitle);
 				return saved;
 			});
 
-			// 3. Ensure demo character from XML
+			// Ensure session has correct GM and initialize playerIds if null
+			if (!user.getId().equals(session.getGameMasterId())) {
+				session.setGameMasterId(user.getId());
+			}
+			if (session.getPlayerIds() == null) {
+				session.setPlayerIds(new java.util.HashSet<>());
+			}
+			// Ensure user2 is in the players list
+			if (!session.getPlayerIds().contains(user2.getId())) {
+				session.getPlayerIds().add(user2.getId());
+			}
+			gameSessionRepository.save(session);
+
+			// 3. Ensure demo character from XML (GM's character - should NOT be in session)
 			String heroName = "Fenia Fuxfell";
-			boolean characterExists = characterRepository.findByName(heroName).isPresent();
-			if (!characterExists) {
+			Optional<Character> existingFenia = characterRepository.findByName(heroName);
+			if (existingFenia.isPresent()) {
+				Character c = existingFenia.get();
+				// GM's character should not be in session
+				if (c.getSessionId() != null && c.getSessionId().equals(session.getId())) {
+					c.setSessionId(null);
+					characterRepository.save(c);
+					LOG.info("Removed '{}' from demo session (GM's character)", heroName);
+				}
+			} else {
 				try {
 					ClassPathResource resource = new ClassPathResource("static/FeniaFuxfell.xml");
 					if (!resource.exists()) {
@@ -88,7 +110,7 @@ public class DsaTableBackendApplication {
 
 					Character c = HeroXMLParser.fromXmlData(xml);
 					c.setOwnerId(user.getId());
-					c.setSessionId(session.getId());
+					c.setSessionId(null); // GM's character should NOT be in session
 					// Initialize current resources based on calculated totals
 					c.updateCalculated();
 					c.setCurrentLife(c.getTotalLife());
@@ -101,10 +123,18 @@ public class DsaTableBackendApplication {
 				}
 			}
 
-			// 4. Ensure Krixnix character from XML for demo2 user
+			// 4. Ensure Krixnix character from XML for demo2 user (player's character - should be in session)
 			String krixnixName = "Krixnix";
-			boolean krixnixExists = characterRepository.findByName(krixnixName).isPresent();
-			if (!krixnixExists) {
+			Optional<Character> existingKrixnix = characterRepository.findByName(krixnixName);
+			if (existingKrixnix.isPresent()) {
+				Character c = existingKrixnix.get();
+				// Player's character should be in session
+				if (c.getSessionId() == null || !c.getSessionId().equals(session.getId())) {
+					c.setSessionId(session.getId());
+					characterRepository.save(c);
+					LOG.info("Assigned '{}' to demo session", krixnixName);
+				}
+			} else {
 				try {
 					ClassPathResource resource = new ClassPathResource("static/Krixnix.xml");
 					if (!resource.exists()) {
@@ -116,7 +146,7 @@ public class DsaTableBackendApplication {
 
 					Character c = HeroXMLParser.fromXmlData(xml);
 					c.setOwnerId(user2.getId());
-					c.setSessionId(null); // Not assigned to session by default
+					c.setSessionId(session.getId()); // Player's character should be in session
 					// Initialize current resources based on calculated totals
 					c.updateCalculated();
 					c.setCurrentLife(c.getTotalLife());
