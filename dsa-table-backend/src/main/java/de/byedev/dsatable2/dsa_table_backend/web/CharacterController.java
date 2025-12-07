@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/dsatable2/characters")
+@RequestMapping("/api/characters")
 @CrossOrigin(origins = "*")
 @Tag(name = "Characters", description = "API for managing DSA characters (heroes)")
 public class CharacterController {
