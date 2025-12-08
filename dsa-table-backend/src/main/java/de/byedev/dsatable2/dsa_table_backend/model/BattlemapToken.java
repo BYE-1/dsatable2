@@ -27,6 +27,18 @@ public class BattlemapToken {
     @Column(name = "is_gm_only")
     private Boolean isGmOnly = false;
 
+    @Column(name = "color")
+    private String color;
+
+    @Column(name = "avatar_url", length = 1000)
+    private String avatarUrl;
+
+    @Column(name = "border_color")
+    private String borderColor;
+
+    @Column(name = "name")
+    private String name;
+
     public BattlemapToken() {
     }
 
@@ -80,5 +92,37 @@ public class BattlemapToken {
 
     public void setIsGmOnly(Boolean isGmOnly) {
         this.isGmOnly = isGmOnly;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
+
+    public String getBorderColor() {
+        return borderColor;
+    }
+
+    public void setBorderColor(String borderColor) {
+        this.borderColor = borderColor;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 }

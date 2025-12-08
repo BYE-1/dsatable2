@@ -41,10 +41,14 @@ export class AuthService {
   }
 
   logout(): void {
+    this.clearAuthState();
+    this.router.navigate(['/login']);
+  }
+
+  clearAuthState(): void {
     localStorage.removeItem(this.tokenKey);
     localStorage.removeItem(this.userKey);
     this.currentUserSubject.next(null);
-    this.router.navigate(['/login']);
   }
 
   getToken(): string | null {

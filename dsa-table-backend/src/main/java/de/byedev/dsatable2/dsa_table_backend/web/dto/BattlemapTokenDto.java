@@ -6,6 +6,10 @@ public class BattlemapTokenDto {
     private Double x;
     private Double y;
     private Boolean isGmOnly;
+    private String color;
+    private String avatarUrl;
+    private String borderColor;
+    private String name;
 
     public BattlemapTokenDto() {
     }
@@ -56,5 +60,37 @@ public class BattlemapTokenDto {
 
     public void setIsGmOnly(Boolean isGmOnly) {
         this.isGmOnly = isGmOnly;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
+
+    public String getBorderColor() {
+        return borderColor;
+    }
+
+    public void setBorderColor(String borderColor) {
+        this.borderColor = borderColor;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 }

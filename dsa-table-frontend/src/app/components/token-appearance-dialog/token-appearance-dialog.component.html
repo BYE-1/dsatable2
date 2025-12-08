@@ -1,0 +1,94 @@
+<div *ngIf="visible && token" class="token-appearance-dialog-overlay" (click)="onDialogOverlayClick($event)">
+  <div class="token-appearance-dialog" (click)="$event.stopPropagation()">
+    <div class="token-appearance-dialog-header">
+      <h3>{{ isPlayerMode ? 'Token Info' : 'Edit Token Appearance' }}</h3>
+      <button type="button" class="dialog-close-btn" (click)="onCancelClick()">✕</button>
+    </div>
+    
+    <div class="token-appearance-dialog-content">
+      <!-- Token Name -->
+      <div class="token-appearance-option-group">
+        <label>Token Name</label>
+        <div *ngIf="isPlayerMode" class="token-info-display">{{ tokenName || 'Unnamed Token' }}</div>
+        <input 
+          *ngIf="!isPlayerMode"
+          type="text" 
+          [(ngModel)]="tokenName" 
+          class="token-name-input" 
+          placeholder="Enter token name"
+          [disabled]="token?.characterId !== undefined">
+        <small *ngIf="token?.characterId !== undefined && !isPlayerMode" class="token-name-hint">Player token name is set from character</small>
+      </div>
+      
+      <!-- Mode Selection -->
+      <div class="token-appearance-mode-selection" *ngIf="!isPlayerMode">
+        <label class="token-appearance-mode-option">
+          <input 
+            type="radio" 
+            name="tokenAppearanceMode" 
+            value="color"
+            [(ngModel)]="tokenAppearanceMode">
+          <span>Solid Color</span>
+        </label>
+        <label class="token-appearance-mode-option">
+          <input 
+            type="radio" 
+            name="tokenAppearanceMode" 
+            value="avatar"
+            [(ngModel)]="tokenAppearanceMode">
+          <span>Character Avatar</span>
+        </label>
+      </div>
+      
+      <!-- Color Mode -->
+      <div *ngIf="tokenAppearanceMode === 'color' || isPlayerMode" class="token-appearance-color-section">
+        <div class="token-appearance-option-group" *ngIf="!isPlayerMode">
+          <label>Token Color</label>
+          <div class="token-color-picker-wrapper">
+            <input 
+              type="color" 
+              [(ngModel)]="tokenColor" 
+              class="token-color-input" 
+              title="Select token color">
+            <div class="token-color-preview" [style.background-color]="tokenColor"></div>
+          </div>
+        </div>
+        <div class="token-appearance-option-group">
+          <label>Border Color</label>
+          <div class="token-color-picker-wrapper">
+            <input 
+              type="color" 
+              [(ngModel)]="tokenBorderColor" 
+              class="token-color-input" 
+              title="Select border color">
+            <div class="token-border-preview" [style.border-color]="tokenBorderColor"></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Avatar Mode -->
+      <div *ngIf="tokenAppearanceMode === 'avatar' && !isPlayerMode" class="token-appearance-avatar-section">
+        <app-avatar-editor
+          [initialAvatarUrl]="token?.avatarUrl"
+          [showBorderColor]="true"
+          [borderColor]="tokenBorderColor"
+          [compact]="true"
+          (avatarSaved)="onAvatarSaved($event)"
+          (canceled)="onCancelClick()">
+        </app-avatar-editor>
+      </div>
+    </div>
+
+    <!-- Delete button for avatar mode (shown separately since avatar editor has its own footer) -->
+    <div *ngIf="tokenAppearanceMode === 'avatar' && !isPlayerMode && canDelete" class="token-appearance-dialog-footer" (click)="$event.stopPropagation()">
+      <button type="button" class="btn-delete" (click)="onDeleteClick()">Delete Token</button>
+    </div>
+
+    <!-- Footer buttons shown for color mode or player mode (avatar mode has its own buttons) -->
+    <div *ngIf="tokenAppearanceMode === 'color' || isPlayerMode" class="token-appearance-dialog-footer" (click)="$event.stopPropagation()">
+      <button *ngIf="canDelete" type="button" class="btn-delete" (click)="onDeleteClick()">Delete</button>
+      <button type="button" class="btn-cancel" (click)="onCancelClick()">Cancel</button>
+      <button type="button" class="btn-save" (click)="onSaveClick()">Save</button>
+    </div>
+  </div>
+</div>

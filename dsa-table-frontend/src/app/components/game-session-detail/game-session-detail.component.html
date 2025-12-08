@@ -90,7 +90,7 @@
 
       <!-- Middle - Battle Map -->
       <div class="battlemap-area">
-        <app-battlemap [sessionId]="sessionId!" *ngIf="sessionId"></app-battlemap>
+        <app-battlemap [sessionId]="sessionId!" [isGameMaster]="isGameMaster()" *ngIf="sessionId"></app-battlemap>
       </div>
 
       <!-- Right - Chat -->

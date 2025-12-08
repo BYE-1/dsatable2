@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- Console appender for application logs (excluding Hibernate/database) -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+        </encoder>
+        <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
+            <evaluator>
+                <expression>logger.startsWith("org.hibernate") || 
+                           logger.startsWith("org.springframework.orm.jpa") || 
+                           logger.startsWith("org.springframework.jdbc") ||
+                           logger.startsWith("org.h2")</expression>
+            </evaluator>
+            <onMismatch>ACCEPT</onMismatch>
+            <onMatch>DENY</onMatch>
+        </filter>
+    </appender>
+
+    <!-- File appender for Hibernate/database logs -->
+    <appender name="DATABASE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/database.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/database.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>100MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Logger for Hibernate -->
+    <logger name="org.hibernate" level="DEBUG" additivity="false">
+        <appender-ref ref="DATABASE_FILE"/>
+    </logger>
+
+    <!-- Logger for Spring JPA -->
+    <logger name="org.springframework.orm.jpa" level="DEBUG" additivity="false">
+        <appender-ref ref="DATABASE_FILE"/>
+    </logger>
+
+    <!-- Logger for Spring JDBC -->
+    <logger name="org.springframework.jdbc" level="DEBUG" additivity="false">
+        <appender-ref ref="DATABASE_FILE"/>
+    </logger>
+
+    <!-- Logger for H2 database -->
+    <logger name="org.h2" level="INFO" additivity="false">
+        <appender-ref ref="DATABASE_FILE"/>
+    </logger>
+
+    <!-- Root logger -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+</configuration>

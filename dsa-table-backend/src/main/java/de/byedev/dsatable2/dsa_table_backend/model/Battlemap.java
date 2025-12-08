@@ -31,6 +31,10 @@ public class Battlemap {
     @OneToMany(mappedBy = "battlemap", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<BattlemapToken> tokens = new ArrayList<>();
 
+    @ElementCollection
+    @CollectionTable(name = "battlemap_fog_revealed_areas", joinColumns = @JoinColumn(name = "battlemap_id"))
+    private List<FogRevealedArea> fogRevealedAreas = new ArrayList<>();
+
     public Battlemap() {
     }
 
@@ -88,5 +92,13 @@ public class Battlemap {
 
     public void setTokens(List<BattlemapToken> tokens) {
         this.tokens = tokens;
+    }
+
+    public List<FogRevealedArea> getFogRevealedAreas() {
+        return fogRevealedAreas;
+    }
+
+    public void setFogRevealedAreas(List<FogRevealedArea> fogRevealedAreas) {
+        this.fogRevealedAreas = fogRevealedAreas;
     }
 }

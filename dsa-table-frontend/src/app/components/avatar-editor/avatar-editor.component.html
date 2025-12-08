@@ -1,0 +1,241 @@
+<div class="avatar-editor-content">
+  <!-- Compact layout for tokens -->
+  <ng-container *ngIf="compact">
+    <!-- Compact preview at top -->
+    <div class="avatar-preview-compact">
+      <img [src]="getPreviewUrl()" alt="Avatar preview" class="avatar-preview-img-compact">
+    </div>
+
+    <!-- Preset selector -->
+    <div class="avatar-option-group">
+      <label>Preset</label>
+      <select [(ngModel)]="selectedPreset" (change)="onPresetChange()" class="avatar-select" title="Select predefined avatar preset">
+        <option *ngFor="let preset of predefinedPresets" [value]="preset.name">{{ preset.name }}</option>
+      </select>
+    </div>
+
+    <!-- Options in 2-column grid -->
+    <div class="avatar-options-grid">
+      <div class="avatar-option-group">
+        <label>Hair Style</label>
+        <select [(ngModel)]="avatarOptions.hair" (ngModelChange)="onOptionChange()" class="avatar-select" title="Select hair style">
+          <option [value]="''">Bald</option>
+          <option value="long">Long</option>
+          <option value="short_ruffled">Short Ruffled</option>
+          <option value="short_curly">Short Curly</option>
+          <option value="undercut">Undercut</option>
+          <option value="tomahawk">Tomahawk</option>
+        </select>
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Hair Color</label>
+        <input type="color" [(ngModel)]="avatarOptions.hairColour" (ngModelChange)="onOptionChange()" class="avatar-color-input" title="Select hair color">
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Skin Color</label>
+        <input type="color" [(ngModel)]="avatarOptions.skin" (ngModelChange)="onOptionChange()" class="avatar-color-input" title="Select skin color">
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Clothing Color</label>
+        <input type="color" [(ngModel)]="avatarOptions.clothC" (ngModelChange)="onOptionChange()" class="avatar-color-input" title="Select clothing color">
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Mouth</label>
+        <select [(ngModel)]="avatarOptions.mouth" (ngModelChange)="onOptionChange()" class="avatar-select" title="Select mouth expression">
+          <option value="up">Up</option>
+          <option value="down">Down</option>
+          <option value="straight">Straight</option>
+          <option value="covered">Covered</option>
+        </select>
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Ears</label>
+        <select [(ngModel)]="avatarOptions.ears" (ngModelChange)="onOptionChange()" class="avatar-select" title="Select ear type">
+          <option value="none">None</option>
+          <option value="normal">Normal</option>
+          <option value="pointy">Pointy</option>
+        </select>
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Eyebrows</label>
+        <select [(ngModel)]="avatarOptions.eyebrows" (ngModelChange)="onOptionChange()" class="avatar-select" title="Select eyebrow style">
+          <option value="none">None</option>
+          <option value="straight">Straight</option>
+          <option value="down">Down</option>
+        </select>
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Weapon</label>
+        <select [(ngModel)]="avatarOptions.weapon" (ngModelChange)="onOptionChange()" class="avatar-select" title="Select weapon">
+          <option value="none">None</option>
+          <option value="sword">Sword</option>
+          <option value="axe">Axe</option>
+          <option value="bow">Bow</option>
+          <option value="mage_staff">Mage Staff</option>
+        </select>
+      </div>
+
+      <div class="avatar-option-group avatar-equipment-group">
+        <label>Equipment</label>
+        <div class="avatar-checkboxes">
+          <label class="avatar-checkbox-label">
+            <input 
+              type="checkbox" 
+              [checked]="isEquipSelected('shoulder_pads')"
+              (change)="toggleEquip('shoulder_pads')">
+            Shoulder Pads
+          </label>
+          <label class="avatar-checkbox-label">
+            <input 
+              type="checkbox" 
+              [checked]="isEquipSelected('helmet')"
+              (change)="toggleEquip('helmet')">
+            Helmet
+          </label>
+        </div>
+      </div>
+
+      <div class="avatar-option-group" *ngIf="showBorderColor">
+        <label>Border Color</label>
+        <div class="color-picker-wrapper-compact">
+          <input 
+            type="color" 
+            [(ngModel)]="currentBorderColor" 
+            class="color-input-compact" 
+            title="Select border color">
+          <div class="border-preview-compact" [style.border-color]="currentBorderColor"></div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- Full layout for characters -->
+  <ng-container *ngIf="!compact">
+    <div class="avatar-preview-section">
+      <h4>Preview</h4>
+      <div class="avatar-preview">
+        <img [src]="getPreviewUrl()" alt="Avatar preview" class="avatar-preview-img">
+      </div>
+    </div>
+
+    <div class="avatar-options-section">
+      <!-- Preset selector -->
+      <div class="avatar-option-group">
+        <label>Preset</label>
+        <select [(ngModel)]="selectedPreset" (change)="onPresetChange()" class="avatar-select" title="Select predefined avatar preset">
+          <option *ngFor="let preset of predefinedPresets" [value]="preset.name">{{ preset.name }}</option>
+        </select>
+      </div>
+      <div class="avatar-option-group">
+        <label>Hair Style</label>
+        <select [(ngModel)]="avatarOptions.hair" (ngModelChange)="onOptionChange()" class="avatar-select" title="Select hair style">
+          <option [value]="''">Bald (default)</option>
+          <option value="long">Long</option>
+          <option value="short_ruffled">Short Ruffled</option>
+          <option value="short_curly">Short Curly</option>
+          <option value="undercut">Undercut</option>
+          <option value="tomahawk">Tomahawk</option>
+        </select>
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Hair Color</label>
+        <input type="color" [(ngModel)]="avatarOptions.hairColour" (ngModelChange)="onOptionChange()" class="avatar-color-input" title="Select hair color">
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Skin Color</label>
+        <input type="color" [(ngModel)]="avatarOptions.skin" (ngModelChange)="onOptionChange()" class="avatar-color-input" title="Select skin color">
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Clothing Color</label>
+        <input type="color" [(ngModel)]="avatarOptions.clothC" (ngModelChange)="onOptionChange()" class="avatar-color-input" title="Select clothing color">
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Mouth</label>
+        <select [(ngModel)]="avatarOptions.mouth" (ngModelChange)="onOptionChange()" class="avatar-select" title="Select mouth expression">
+          <option value="up">Up</option>
+          <option value="down">Down</option>
+          <option value="straight">Straight</option>
+          <option value="covered">Covered</option>
+        </select>
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Ears</label>
+        <select [(ngModel)]="avatarOptions.ears" (ngModelChange)="onOptionChange()" class="avatar-select" title="Select ear type">
+          <option value="none">None</option>
+          <option value="normal">Normal</option>
+          <option value="pointy">Pointy</option>
+        </select>
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Eyebrows</label>
+        <select [(ngModel)]="avatarOptions.eyebrows" (ngModelChange)="onOptionChange()" class="avatar-select" title="Select eyebrow style">
+          <option value="none">None</option>
+          <option value="straight">Straight</option>
+          <option value="down">Down</option>
+        </select>
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Weapon</label>
+        <select [(ngModel)]="avatarOptions.weapon" (ngModelChange)="onOptionChange()" class="avatar-select" title="Select weapon">
+          <option value="none">None</option>
+          <option value="sword">Sword</option>
+          <option value="axe">Axe</option>
+          <option value="bow">Bow</option>
+          <option value="mage_staff">Mage Staff</option>
+        </select>
+      </div>
+
+      <div class="avatar-option-group">
+        <label>Equipment</label>
+        <div class="avatar-checkboxes">
+          <label class="avatar-checkbox-label">
+            <input 
+              type="checkbox" 
+              [checked]="isEquipSelected('shoulder_pads')"
+              (change)="toggleEquip('shoulder_pads')">
+            Shoulder Pads
+          </label>
+          <label class="avatar-checkbox-label">
+            <input 
+              type="checkbox" 
+              [checked]="isEquipSelected('helmet')"
+              (change)="toggleEquip('helmet')">
+            Helmet
+          </label>
+        </div>
+      </div>
+
+      <div class="avatar-option-group" *ngIf="showBorderColor">
+        <label>Border Color</label>
+        <div class="color-picker-wrapper">
+          <input 
+            type="color" 
+            [(ngModel)]="currentBorderColor" 
+            class="color-input" 
+            title="Select border color">
+          <div class="border-preview" [style.border-color]="currentBorderColor"></div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+  
+  <!-- Save/Cancel buttons -->
+  <div class="avatar-editor-footer">
+    <button type="button" class="btn-cancel" (click)="onCancel()">Cancel</button>
+    <button type="button" class="btn-save" (click)="onSave()">Save</button>
+  </div>
+</div>

@@ -1,31 +1,77 @@
 <div class="battlemap-container">
   <div class="battlemap-content">
-    <!-- Battlemap Menu Button -->
-    <div class="battlemap-menu">
-      <button class="menu-button" type="button">
+    <!-- Battlemap Tools (Vertical Icon List) -->
+    <div class="battlemap-tools" *ngIf="isGameMaster">
+      <button 
+        class="tool-button" 
+        type="button" 
+        [class.active]="isAddingToken" 
+        (click)="onAddToken()"
+        [title]="isAddingToken ? 'Cancel Token Placement' : 'Add Token'">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="3" y1="12" x2="21" y2="12"></line>
-          <line x1="3" y1="6" x2="21" y2="6"></line>
-          <line x1="3" y1="18" x2="21" y2="18"></line>
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="16"></line>
+          <line x1="8" y1="12" x2="16" y2="12"></line>
         </svg>
       </button>
-      <div class="menu-dropdown">
-        <button class="menu-item" type="button" [class.active]="isAddingToken" (click)="onAddToken()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="16"></line>
-            <line x1="8" y1="12" x2="16" y2="12"></line>
+      <button 
+        class="tool-button" 
+        type="button" 
+        (click)="onConfigureSize()"
+        title="Configure Grid Size">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="9" y1="3" x2="9" y2="21"></line>
+          <line x1="3" y1="9" x2="21" y2="9"></line>
+        </svg>
+      </button>
+      <button 
+        class="tool-button" 
+        type="button" 
+        (click)="onSetBackgroundImage()"
+        title="Set Background Image">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+          <polyline points="21 15 16 10 5 21"></polyline>
+        </svg>
+      </button>
+      <div class="fog-tool-wrapper">
+        <button 
+          class="tool-button" 
+          type="button" 
+          [class.active]="isFogOfWarMode" 
+          (click)="onToggleFogOfWar()"
+          (contextmenu)="onFogButtonRightClick($event)"
+          [title]="getFogButtonTitle()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path>
+            <path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"></path>
           </svg>
-          <span>Add Token</span>
         </button>
-        <button class="menu-item" type="button" (click)="onConfigureSize()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="9" y1="3" x2="9" y2="21"></line>
-            <line x1="3" y1="9" x2="21" y2="9"></line>
-          </svg>
-          <span>Configure Size</span>
-        </button>
+        <div class="fog-menu" *ngIf="showFogMenu" (click)="$event.stopPropagation()">
+          <button 
+            class="fog-menu-item" 
+            type="button"
+            [class.active]="fogMode === 'add'"
+            (click)="setFogMode('add')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Add Fog</span>
+          </button>
+          <button 
+            class="fog-menu-item" 
+            type="button"
+            [class.active]="fogMode === 'remove'"
+            (click)="setFogMode('remove')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Remove Fog</span>
+          </button>
+        </div>
       </div>
     </div>
     
@@ -34,6 +80,7 @@
       class="map-viewport" 
       #mapViewport 
       [class.token-placement-mode]="isAddingToken"
+      [class.fog-of-war-mode]="isFogOfWarMode"
       (dragover)="onDragOver($event)"
       (drop)="onDrop($event)"
       (dragleave)="onDragLeave($event)">
@@ -57,7 +104,40 @@
           <!-- GM-only tokens will be rendered here -->
         </div>
         
-        <!-- Layer 4: Public Tokens (top) -->
+        <!-- Layer 4: Fog of War -->
+        <div class="map-layer layer-fog" [class.fog-gm]="isGameMaster" [class.fog-player]="!isGameMaster">
+          <svg class="fog-svg" [attr.width]="baseCanvasWidth" [attr.height]="baseCanvasHeight">
+            <defs>
+              <mask id="fogMask">
+                <!-- White background = fog visible everywhere -->
+                <rect width="100%" height="100%" fill="white"/>
+                <!-- Black rectangles = revealed cells (transparent, no fog) -->
+                <rect 
+                  *ngFor="let cell of getRevealedCellPositions(); let i = index"
+                  [attr.x]="cell.x"
+                  [attr.y]="cell.y"
+                  [attr.width]="cell.width"
+                  [attr.height]="cell.height"
+                  fill="black"/>
+              </mask>
+            </defs>
+            <!-- Fog overlay: different colors/opacity for GM vs players -->
+            <!-- If no revealed areas, show full fog. Otherwise use mask to show revealed areas -->
+            <rect 
+              *ngIf="fogRevealedAreas.length === 0"
+              width="100%" 
+              height="100%" 
+              [attr.fill]="isGameMaster ? 'rgba(128, 128, 128, 0.6)' : 'rgba(0, 0, 0, 1)'"/>
+            <rect 
+              *ngIf="fogRevealedAreas.length > 0"
+              width="100%" 
+              height="100%" 
+              [attr.fill]="isGameMaster ? 'rgba(128, 128, 128, 0.6)' : 'rgba(0, 0, 0, 1)'"
+              mask="url(#fogMask)"/>
+          </svg>
+        </div>
+        
+        <!-- Layer 5: Public Tokens (top) -->
         <div class="map-layer layer-tokens layer-public-tokens">
           <!-- Public tokens -->
           <div 
@@ -66,19 +146,37 @@
             [class.token-gm-only]="token.isGmOnly"
             [class.token-dragging]="isDraggingToken && draggedTokenId === token.id"
             [class.token-with-avatar]="token.avatarUrl"
+            [class.token-with-color]="token.color"
             [style.left.px]="token.x"
             [style.top.px]="token.y"
             [style.width.px]="getTokenSize()"
             [style.height.px]="getTokenSize()"
-            (mousedown)="onTokenMouseDown($event, token.id)">
+            [style.background-color]="token.color"
+            [style.border-color]="token.borderColor || '#ffffff'"
+            (mousedown)="onTokenMouseDown($event, token.id)"
+            (contextmenu)="onTokenContextMenu($event, token.id)">
             <img 
               *ngIf="token.avatarUrl" 
-              [src]="token.avatarUrl" 
+              [src]="getTokenAvatarUrl(token.avatarUrl)" 
               [alt]="'Token avatar'"
-              class="token-avatar">
+              class="token-avatar"
+              [style.width.px]="getTokenImageSize()"
+              [style.height.px]="getTokenImageSize()"
+              [style.transform]="'scale(' + (1 / getImageScaleFactor()) + ')'"
+              [style.image-rendering]="'auto'">
           </div>
         </div>
       </div>
     </div>
   </div>
+  
+  <!-- Token Appearance Edit Dialog -->
+  <app-token-appearance-dialog
+    [token]="editingToken"
+    [visible]="showTokenAppearanceDialog"
+    [isPlayerMode]="isPlayerEditingOwnToken"
+    (saved)="onTokenAppearanceSaved($event)"
+    (canceled)="closeTokenAppearanceDialog()"
+    (deleted)="onTokenDeleted()">
+  </app-token-appearance-dialog>
 </div>

@@ -3,6 +3,7 @@ package de.byedev.dsatable2.dsa_table_backend.web;
 import de.byedev.dsatable2.dsa_table_backend.model.Battlemap;
 import de.byedev.dsatable2.dsa_table_backend.model.BattlemapToken;
 import de.byedev.dsatable2.dsa_table_backend.model.Character;
+import de.byedev.dsatable2.dsa_table_backend.model.FogRevealedArea;
 import de.byedev.dsatable2.dsa_table_backend.model.GameSession;
 import de.byedev.dsatable2.dsa_table_backend.model.User;
 import de.byedev.dsatable2.dsa_table_backend.repository.BattlemapRepository;
@@ -12,6 +13,7 @@ import de.byedev.dsatable2.dsa_table_backend.repository.UserRepository;
 import de.byedev.dsatable2.dsa_table_backend.util.JwtUtil;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.BattlemapDto;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.BattlemapTokenDto;
+import de.byedev.dsatable2.dsa_table_backend.web.dto.FogRevealedAreaDto;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.GameSessionDto;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -277,7 +279,26 @@ public class GameSessionController {
                                     tokenDto.getY(),
                                     tokenDto.getIsGmOnly()
                             );
+                            token.setColor(tokenDto.getColor());
+                            token.setAvatarUrl(tokenDto.getAvatarUrl());
+                            token.setBorderColor(tokenDto.getBorderColor());
+                            token.setName(tokenDto.getName());
                             battlemap.getTokens().add(token);
+                        }
+                    }
+
+                    // Update fog revealed areas
+                    if (battlemapDto.getFogRevealedAreas() != null) {
+                        // Clear existing fog areas
+                        battlemap.getFogRevealedAreas().clear();
+                        
+                        // Add new fog areas
+                        for (FogRevealedAreaDto fogDto : battlemapDto.getFogRevealedAreas()) {
+                            FogRevealedArea fogArea = new FogRevealedArea(
+                                    fogDto.getGridX(),
+                                    fogDto.getGridY()
+                            );
+                            battlemap.getFogRevealedAreas().add(fogArea);
                         }
                     }
 

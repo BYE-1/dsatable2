@@ -1,23 +1,36 @@
 import { Component, Input, HostListener, ElementRef, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { GameSessionService } from '../../services/game-session.service';
 import { CharacterService } from '../../services/character.service';
+import { ViewportService } from '../../services/viewport.service';
+import { GridService } from '../../services/grid.service';
+import { FogOfWarService } from '../../services/fog-of-war.service';
 import { Battlemap, BattlemapToken } from '../../models/battlemap.model';
 import { Character } from '../../models/character.model';
 import { environment } from '../../../environments/environment';
 import { Subscription, forkJoin, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
+import { TokenAppearanceDialogComponent, TokenAppearanceConfig } from '../token-appearance-dialog/token-appearance-dialog.component';
 
 @Component({
   selector: 'app-battlemap',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule, TokenAppearanceDialogComponent],
   templateUrl: './battlemap.component.html',
   styleUrl: './battlemap.component.scss'
 })
 export class BattlemapComponent implements AfterViewInit, OnDestroy {
   @Input() sessionId?: number;
-  @Input() mapImageUrl?: string; // For future use with actual battlemaps
+  @Input() mapImageUrl?: string;
+  @Input() isGameMaster: boolean = false;
+  
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (this.showFogMenu) {
+      this.showFogMenu = false;
+    }
+  }
   
   private battlemapSubscription?: Subscription;
   private pollingSubscription?: Subscription;
@@ -25,42 +38,35 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
   private isSaving: boolean = false;
   private lastSavedTokenHash: string = '';
   
+  private readonly SAVE_DEBOUNCE_MS = 300;
+  private readonly POLLING_INTERVAL_MS = 2000;
+  
   @ViewChild('mapViewport', { static: false }) mapViewport!: ElementRef<HTMLDivElement>;
   @ViewChild('mapCanvas', { static: false }) mapCanvas!: ElementRef<HTMLDivElement>;
   
-  // Grid configuration
-  gridSize: number = 10; // 10x10 grid (configurable later)
-  
-  // Pan and zoom state
-  zoomLevel: number = 1;
-  panX: number = 0;
-  panY: number = 0;
-  
-  // Track if map has been initialized (to prevent recentering after user interaction)
-  private mapInitialized: boolean = false;
-  
-  // Base canvas dimensions (without zoom) - exposed for template binding
   baseCanvasWidth: number = 512;
   baseCanvasHeight: number = 512;
   
-  // Panning state
-  isPanning: boolean = false;
-  panStartX: number = 0;
-  panStartY: number = 0;
-  panStartOffsetX: number = 0;
-  panStartOffsetY: number = 0;
+  private mapInitialized: boolean = false;
   
-  // Token placement state
+  isPanning: boolean = false;
+  private panStart: { panStartX: number; panStartY: number; panStartOffsetX: number; panStartOffsetY: number } | null = null;
+  
   isAddingToken: boolean = false;
-  tokens: Array<{ id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number }> = [];
+  
+  isFogOfWarMode: boolean = false;
+  showFogMenu: boolean = false;
+  
+  tokens: Array<{ id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string }> = [];
   private nextTokenId: number = 1;
   
-  constructor(
-    private gameSessionService: GameSessionService,
-    private characterService: CharacterService
-  ) {}
+  pendingTokenConfig: { color?: string; avatarUrl?: string; borderColor?: string; name?: string } | null = null;
   
-  // Token dragging state
+  showTokenAppearanceDialog: boolean = false;
+  editingToken: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string } | null = null;
+  private playerCharacterId: number | null = null;
+  isPlayerEditingOwnToken: boolean = false;
+  
   isDraggingToken: boolean = false;
   draggedTokenId: number | null = null;
   dragStartX: number = 0;
@@ -68,15 +74,16 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
   dragStartTokenX: number = 0;
   dragStartTokenY: number = 0;
   
-  // Zoom constraints
-  readonly MIN_ZOOM: number = 0.5;
-  readonly MAX_ZOOM: number = 3;
-  readonly ZOOM_SENSITIVITY: number = 0.1;
+  constructor(
+    private gameSessionService: GameSessionService,
+    private characterService: CharacterService,
+    private viewportService: ViewportService,
+    private gridService: GridService,
+    private fogOfWarService: FogOfWarService
+  ) {}
   
   ngAfterViewInit(): void {
-    // Center the map initially
     setTimeout(() => {
-      // Initialize canvas size to match base dimensions
       if (this.mapCanvas) {
         this.mapCanvas.nativeElement.style.width = this.baseCanvasWidth + 'px';
         this.mapCanvas.nativeElement.style.height = this.baseCanvasHeight + 'px';
@@ -88,6 +95,7 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
       }
       this.setupEventListeners();
       this.loadBattlemap();
+      this.loadPlayerCharacter();
       this.startPolling();
     }, 0);
   }
@@ -104,7 +112,6 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
     }
   }
   
-  // Load battlemap data from backend
   loadBattlemap(): void {
     if (!this.sessionId) return;
     
@@ -120,108 +127,128 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
     });
   }
   
-  // Apply battlemap data (with option to skip if currently saving)
-  // IMPORTANT: Zoom and pan are NEVER loaded from backend - they are purely local view state
+  loadPlayerCharacter(): void {
+    if (!this.sessionId || this.isGameMaster) return;
+    
+    this.gameSessionService.getMyCharacter(this.sessionId).subscribe({
+      next: (character) => {
+        if (character) {
+          this.playerCharacterId = character.id || null;
+        }
+      },
+      error: (error) => {
+        console.error('Error loading player character:', error);
+      }
+    });
+  }
+  
+  /**
+   * Apply battlemap data (with option to skip if currently saving)
+   * IMPORTANT: Zoom and pan are NEVER loaded from backend - they are purely local view state
+   */
   applyBattlemapData(battlemap: Battlemap, skipIfSaving: boolean = true): void {
-    if (skipIfSaving && this.isSaving) {
-      return; // Don't overwrite local changes while saving
-    }
+    if (skipIfSaving && this.isSaving) return;
     
-    // Store current zoom and pan - these are NEVER modified by backend data
-    const currentZoom = this.zoomLevel;
-    const currentPanX = this.panX;
-    const currentPanY = this.panY;
-    
-    // Load battlemap configuration (base dimensions only - zoom is never stored/loaded)
+    const currentViewportState = this.viewportService.getState();
+    this.updateBattlemapConfiguration(battlemap);
+    this.verifyViewportStateIntegrity(currentViewportState);
+    this.updateTokensFromBattlemap(battlemap);
+    this.updateFogOfWar(battlemap);
+    this.handleInitialMapCentering(skipIfSaving);
+  }
+  
+  private updateBattlemapConfiguration(battlemap: Battlemap): void {
     if (battlemap.gridSize !== undefined) {
-      this.gridSize = battlemap.gridSize;
+      this.gridService.setGridSize(battlemap.gridSize);
     }
-    
-    // Check if base dimensions changed
-    const baseWidthChanged = battlemap.canvasWidth && battlemap.canvasWidth !== this.baseCanvasWidth;
-    const baseHeightChanged = battlemap.canvasHeight && battlemap.canvasHeight !== this.baseCanvasHeight;
     
     if (battlemap.canvasWidth) {
       this.baseCanvasWidth = battlemap.canvasWidth;
-      // Update canvas element size to match base dimensions
       if (this.mapCanvas) {
         this.mapCanvas.nativeElement.style.width = this.baseCanvasWidth + 'px';
       }
     }
+    
     if (battlemap.canvasHeight) {
       this.baseCanvasHeight = battlemap.canvasHeight;
-      // Update canvas element size to match base dimensions
       if (this.mapCanvas) {
         this.mapCanvas.nativeElement.style.height = this.baseCanvasHeight + 'px';
       }
     }
+    
     if (battlemap.mapImageUrl) {
       this.mapImageUrl = battlemap.mapImageUrl;
     }
-    
-    // CRITICAL: Zoom and pan are NEVER modified by backend data - they are purely local view state
-    // The zoomLevel, panX, and panY variables are NEVER touched in this method
-    // With CSS transforms, we don't need to update canvas size - the transform handles scaling
-    
-    // Safety check: Verify zoom and pan were not accidentally modified
-    if (this.zoomLevel !== currentZoom || this.panX !== currentPanX || this.panY !== currentPanY) {
+  }
+  
+  /**
+   * Verify that viewport state (zoom/pan) was not accidentally modified
+   */
+  private verifyViewportStateIntegrity(originalState: { zoomLevel: number; panX: number; panY: number }): void {
+    const newState = this.viewportService.getState();
+    if (newState.zoomLevel !== originalState.zoomLevel || 
+        newState.panX !== originalState.panX || 
+        newState.panY !== originalState.panY) {
       console.error('ERROR: Zoom or pan was modified by applyBattlemapData - restoring original values!');
-      this.zoomLevel = currentZoom;
-      this.panX = currentPanX;
-      this.panY = currentPanY;
+      this.viewportService.setState(originalState);
     }
+  }
+  
+  private updateTokensFromBattlemap(battlemap: Battlemap): void {
+    if (this.isSaving) return;
     
-    // View state (zoom/pan) is local only - not synchronized
-    // No need to load from backend since they're not stored
-    
-    // Update tokens only if they've changed
     const tokenHash = this.getTokenHash(battlemap.tokens || []);
-    if (tokenHash !== this.lastSavedTokenHash) {
-      if (battlemap.tokens && battlemap.tokens.length > 0) {
-        this.tokens = battlemap.tokens.map(token => ({
-          id: token.tokenId,
-          x: token.x,
-          y: token.y,
-          isGmOnly: token.isGmOnly || false,
-          characterId: token.tokenId, // Assume tokenId is characterId for now
-          avatarUrl: undefined // Will be loaded below
-        }));
-        // Find the highest token ID to set nextTokenId
-        const maxId = Math.max(...this.tokens.map(t => t.id), 0);
-        this.nextTokenId = maxId + 1;
-        
-        // Load character data to get avatar URLs
-        this.loadTokenAvatars();
-      } else {
-        this.tokens = [];
-      }
-      this.lastSavedTokenHash = tokenHash;
+    if (tokenHash === this.lastSavedTokenHash) return;
+    
+    if (battlemap.tokens && battlemap.tokens.length > 0) {
+      this.tokens = battlemap.tokens.map(token => this.mapDtoToToken(token));
+      this.nextTokenId = Math.max(...this.tokens.map(t => t.id), 0) + 1;
+      this.loadTokenAvatars();
+    } else {
+      this.tokens = [];
     }
     
-    // Re-center map after loading (only on initial load, and only if map hasn't been initialized yet)
-    // This should only happen once on initial load, never during polling
+    this.lastSavedTokenHash = tokenHash;
+  }
+  
+  private mapDtoToToken(dto: BattlemapToken): { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string } {
+    return {
+      id: dto.tokenId,
+      x: dto.x,
+      y: dto.y,
+      isGmOnly: dto.isGmOnly || false,
+      characterId: undefined,
+      avatarUrl: dto.avatarUrl,
+      color: dto.color,
+      borderColor: dto.borderColor,
+      name: dto.name
+    };
+  }
+  
+  private updateFogOfWar(battlemap: Battlemap): void {
+    this.fogOfWarService.setFogAreas(battlemap.fogRevealedAreas || []);
+  }
+  
+  private handleInitialMapCentering(skipIfSaving: boolean): void {
     if (!skipIfSaving && !this.mapInitialized) {
       setTimeout(() => {
-        // Ensure canvas size is set based on current zoom (should be 1.0 on initial load)
         this.centerMap();
         this.mapInitialized = true;
       }, 100);
     }
   }
   
-  // Get a hash of tokens for comparison
   getTokenHash(tokens: BattlemapToken[]): string {
     return tokens
-      .map(t => `${t.tokenId}:${t.x.toFixed(2)}:${t.y.toFixed(2)}:${t.isGmOnly}`)
+      .map(t => `${t.tokenId}:${t.x.toFixed(2)}:${t.y.toFixed(2)}:${t.isGmOnly}:${t.color || ''}:${t.avatarUrl || ''}:${t.borderColor || ''}:${t.name || ''}`)
       .sort()
       .join('|');
   }
   
-  // Start polling for battlemap updates
   startPolling(): void {
     if (!this.sessionId) return;
     
-    this.pollingSubscription = this.gameSessionService.pollBattlemap(this.sessionId, 2000).subscribe({
+    this.pollingSubscription = this.gameSessionService.pollBattlemap(this.sessionId, this.POLLING_INTERVAL_MS).subscribe({
       next: (battlemap) => {
         if (battlemap) {
           this.applyBattlemapData(battlemap, true);
@@ -233,98 +260,168 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
     });
   }
   
-  // Save battlemap data to backend (debounced)
+  /**
+   * Save battlemap data to backend (debounced)
+   * IMPORTANT: Only base dimensions and token positions are saved - zoom/pan are local view state
+   */
   saveBattlemap(): void {
     if (!this.sessionId) return;
     
-    // Clear existing timeout
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout);
     }
     
-    // Debounce saves to avoid too many API calls
+    this.isSaving = true;
+    
     this.saveTimeout = setTimeout(() => {
-      // IMPORTANT: Only save base dimensions and token positions in base canvas coordinates
-      // Zoom, pan, and displayed canvas size are NEVER saved - they are purely local view state
-      const battlemap: Battlemap = {
-        gridSize: this.gridSize,
-        canvasWidth: this.baseCanvasWidth,  // Base width (NOT zoomed)
-        canvasHeight: this.baseCanvasHeight, // Base height (NOT zoomed)
-        mapImageUrl: this.mapImageUrl,
-        // zoomLevel, panX, panY are NEVER saved - they are local view state only
-        tokens: this.tokens.map(token => ({
-          tokenId: token.id,
-          x: token.x,  // Base canvas coordinates (NOT affected by zoom)
-          y: token.y,  // Base canvas coordinates (NOT affected by zoom)
-          isGmOnly: token.isGmOnly
-        }))
-      };
-      
+      const battlemap = this.buildBattlemapDto();
       const tokenHash = this.getTokenHash(battlemap.tokens || []);
-      this.lastSavedTokenHash = tokenHash;
-      this.isSaving = true;
       
       this.gameSessionService.updateBattlemap(this.sessionId!, battlemap).subscribe({
         next: () => {
-          // Successfully saved
+          this.lastSavedTokenHash = tokenHash;
           this.isSaving = false;
-          // Don't update canvas size here - it's already correct and zoom/pan are local state
         },
         error: (error) => {
           console.error('Error saving battlemap:', error);
           this.isSaving = false;
         }
       });
-    }, 300); // 300ms debounce (reduced for faster sync)
+    }, this.SAVE_DEBOUNCE_MS);
   }
   
-  // Setup event listeners on the viewport element
+  private buildBattlemapDto(): Battlemap {
+    const dto: Battlemap = {
+      gridSize: this.gridService.gridSize,
+      canvasWidth: this.baseCanvasWidth,
+      canvasHeight: this.baseCanvasHeight,
+      tokens: this.tokens.map(token => this.mapTokenToDto(token)),
+      fogRevealedAreas: this.fogOfWarService.getFogAreas()
+    };
+    
+    if (this.mapImageUrl !== undefined) {
+      dto.mapImageUrl = this.mapImageUrl;
+    }
+    
+    return dto;
+  }
+  
   setupEventListeners(): void {
     if (!this.mapViewport) return;
     
     const viewport = this.mapViewport.nativeElement;
     
-    // Mouse down for panning and token placement
     viewport.addEventListener('mousedown', (e: MouseEvent) => this.onMouseDown(e));
     
-    // Mouse move for panning and token cursor
     viewport.addEventListener('mousemove', (e: MouseEvent) => {
       this.onMouseMove(e);
       this.updateTokenCursor(e);
     });
     
-    // Mouse up
     viewport.addEventListener('mouseup', (e: MouseEvent) => this.onMouseUp(e));
     
-    // Mouse leave
     viewport.addEventListener('mouseleave', (e: MouseEvent) => {
       this.onMouseLeave(e);
       this.hideTokenCursor();
     });
     
-    // Wheel for zooming
     viewport.addEventListener('wheel', (e: WheelEvent) => this.onWheel(e), { passive: false });
     
-    // Prevent context menu on right click
     viewport.addEventListener('contextmenu', (e: MouseEvent) => {
       e.preventDefault();
     });
     
-    // Document-level listeners for token dragging (to handle mouse outside viewport)
     document.addEventListener('mousemove', (e: MouseEvent) => {
       if (this.isDraggingToken) {
         this.updateTokenDrag(e);
+      } else if (this.fogOfWarService.isPainting && this.isFogOfWarMode) {
+        this.paintFogCell(e);
       }
     });
     
     document.addEventListener('mouseup', (e: MouseEvent) => {
       if (this.isDraggingToken && e.button === 0) {
         this.finishTokenDrag(e);
+      } else if (this.fogOfWarService.isPainting && e.button === 0) {
+        this.stopFogPainting();
       }
     });
   }
   
-  // Update token cursor position (snapped to grid)
+  // ============================================================================
+  // Helper Methods
+  // ============================================================================
+  
+  /**
+   * Get viewport bounding rectangle
+   */
+  private getViewportRect(): DOMRect | null {
+    if (!this.mapViewport) return null;
+    return this.mapViewport.nativeElement.getBoundingClientRect();
+  }
+  
+  private getMousePosition(event: MouseEvent): { x: number; y: number } | null {
+    const rect = this.getViewportRect();
+    if (!rect) return null;
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    };
+  }
+  
+  /**
+   * Update viewport cursor style
+   */
+  private setViewportCursor(cursor: string): void {
+    if (this.mapViewport) {
+      this.mapViewport.nativeElement.style.cursor = cursor;
+    }
+  }
+  
+  private mapTokenToDto(token: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string }): BattlemapToken {
+    const dto: BattlemapToken = {
+      tokenId: token.id,
+      x: token.x,
+      y: token.y,
+      isGmOnly: token.isGmOnly
+    };
+    
+    if (token.color !== undefined) {
+      dto.color = token.color;
+    }
+    if (token.avatarUrl !== undefined) {
+      dto.avatarUrl = token.avatarUrl;
+    }
+    if (token.borderColor !== undefined) {
+      dto.borderColor = token.borderColor;
+    }
+    if (token.name !== undefined) {
+      dto.name = token.name;
+    }
+    
+    return dto;
+  }
+  
+  private exitTokenPlacementMode(): void {
+    this.isAddingToken = false;
+    this.setViewportCursor('grab');
+    if (this.mapViewport) {
+      this.mapViewport.nativeElement.classList.remove('token-placement-mode');
+    }
+    this.hideTokenCursor();
+  }
+  
+  /**
+   * Enter token placement mode
+   */
+  private enterTokenPlacementMode(): void {
+    this.isAddingToken = true;
+    this.setViewportCursor('none');
+    if (this.mapViewport) {
+      this.mapViewport.nativeElement.classList.add('token-placement-mode');
+    }
+  }
+  
   updateTokenCursor(event: MouseEvent): void {
     if (!this.isAddingToken || !this.mapViewport || !this.mapCanvas) {
       this.hideTokenCursor();
@@ -332,34 +429,22 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
     }
     
     const viewport = this.mapViewport.nativeElement;
-    const rect = viewport.getBoundingClientRect();
     const cursor = viewport.querySelector('.token-cursor') as HTMLElement;
-    
     if (!cursor) return;
     
-    // Get mouse position relative to viewport
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
+    const mousePos = this.getMousePosition(event);
+    if (!mousePos) return;
     
-    // Calculate position on base canvas (convert from viewport to base canvas coordinates)
-    const canvasX = (mouseX - this.panX) / this.zoomLevel;
-    const canvasY = (mouseY - this.panY) / this.zoomLevel;
+    const canvasCoords = this.gridService.viewportToCanvas(mousePos.x, mousePos.y, this.panX, this.panY, this.zoomLevel);
+    const snappedX = this.snapToGrid(canvasCoords.x, false);
+    const snappedY = this.snapToGrid(canvasCoords.y, true);
+    const viewportCoords = this.gridService.canvasToViewport(snappedX, snappedY, this.panX, this.panY, this.zoomLevel);
     
-    // Snap to grid cell center (in base canvas coordinates)
-    const snappedX = this.snapToGrid(canvasX, false);
-    const snappedY = this.snapToGrid(canvasY, true);
-    
-    // Convert back to viewport coordinates for display
-    const viewportX = snappedX * this.zoomLevel + this.panX;
-    const viewportY = snappedY * this.zoomLevel + this.panY;
-    
-    // Position cursor at snapped location
     cursor.style.display = 'block';
-    cursor.style.left = viewportX + 'px';
-    cursor.style.top = viewportY + 'px';
+    cursor.style.left = viewportCoords.x + 'px';
+    cursor.style.top = viewportCoords.y + 'px';
   }
   
-  // Hide token cursor
   hideTokenCursor(): void {
     if (!this.mapViewport) return;
     
@@ -371,276 +456,415 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
     }
   }
   
-  // Placeholder - using a data URI for a simple green rectangle
+  // ============================================================================
+  // Template Getters
+  // ============================================================================
+  
+  /**
+   * Placeholder - using a data URI for a simple green rectangle
+   */
   get placeholderImageUrl(): string {
-    // Return a simple SVG as data URI with green background
     return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iIzRmN2MyYSIvPjwvc3ZnPg==';
   }
   
-  // Get grid cell size as percentage
   get gridCellSizePercent(): number {
-    return 100 / this.gridSize;
+    return this.gridService.getGridCellSizePercent();
   }
   
-  // Get transform style for map canvas (translation and scaling via CSS transform)
   get mapTransform(): string {
-    // Apply pan and zoom using CSS transforms
-    // This is more performant and avoids coordinate calculation issues
-    return `translate(${this.panX}px, ${this.panY}px) scale(${this.zoomLevel})`;
+    return this.viewportService.getTransform();
   }
   
-  // Center the map in the viewport
+  get zoomLevel(): number {
+    return this.viewportService.zoomLevel;
+  }
+  
+  get panX(): number {
+    return this.viewportService.panX;
+  }
+  
+  get panY(): number {
+    return this.viewportService.panY;
+  }
+  
   centerMap(): void {
     if (!this.mapViewport || !this.mapCanvas) return;
     
     const viewport = this.mapViewport.nativeElement;
-    
-    const viewportWidth = viewport.clientWidth;
-    const viewportHeight = viewport.clientHeight;
-    
-    // With CSS transform, the canvas is scaled, so we need to account for zoom
-    const scaledCanvasWidth = this.baseCanvasWidth * this.zoomLevel;
-    const scaledCanvasHeight = this.baseCanvasHeight * this.zoomLevel;
-    
-    // Center the canvas
-    this.panX = (viewportWidth - scaledCanvasWidth) / 2;
-    this.panY = (viewportHeight - scaledCanvasHeight) / 2;
+    this.viewportService.centerMap(viewport.clientWidth, viewport.clientHeight, this.baseCanvasWidth, this.baseCanvasHeight);
   }
   
-  // Handle mouse button down
   onMouseDown(event: MouseEvent): void {
-    if (event.button === 2) { // Right mouse button - panning
+    if (event.button === 2) {
       event.preventDefault();
       this.isPanning = true;
-      this.panStartX = event.clientX;
-      this.panStartY = event.clientY;
-      this.panStartOffsetX = this.panX;
-      this.panStartOffsetY = this.panY;
-      
-      if (this.mapViewport) {
-        this.mapViewport.nativeElement.style.cursor = 'grabbing';
-      }
-    } else if (event.button === 0 && this.isAddingToken) { // Left mouse button - place token
+      this.panStart = this.viewportService.startPan(event.clientX, event.clientY);
+      this.setViewportCursor('grabbing');
+    } else if (event.button === 0 && this.isAddingToken) {
       event.preventDefault();
       this.placeToken(event);
+    } else if (event.button === 0 && this.isFogOfWarMode) {
+      event.preventDefault();
+      this.startFogPainting(event);
     }
-    // Token dragging is handled separately via token mousedown event
   }
   
-  // Handle mouse move for panning and token dragging
   onMouseMove(event: MouseEvent): void {
-    if (this.isPanning) {
-      const deltaX = event.clientX - this.panStartX;
-      const deltaY = event.clientY - this.panStartY;
-      
-      this.panX = this.panStartOffsetX + deltaX;
-      this.panY = this.panStartOffsetY + deltaY;
-      
-      // Mark map as initialized (user has panned)
+    if (this.isPanning && this.panStart) {
+      if (!this.mapViewport) return;
+      const viewport = this.mapViewport.nativeElement;
+      this.viewportService.updatePan(
+        this.panStart, 
+        event.clientX, 
+        event.clientY, 
+        viewport.clientWidth, 
+        viewport.clientHeight, 
+        this.baseCanvasWidth, 
+        this.baseCanvasHeight
+      );
       this.mapInitialized = true;
-      
-      // Pan state is local only - not saved to backend
     } else if (this.isDraggingToken && this.draggedTokenId !== null) {
       this.updateTokenDrag(event);
+    } else if (this.fogOfWarService.isPainting && this.isFogOfWarMode) {
+      this.paintFogCell(event);
     }
   }
   
-  // Get grid cell size in pixels (average for circular tokens) - in base canvas coordinates
-  getGridCellSize(): number {
-    // Use average of base width and height to get a size that fits in cells
-    const cellSize = (this.baseCanvasWidth + this.baseCanvasHeight) / (2 * this.gridSize);
-    return cellSize;
-  }
-
-  // Get token size (smaller than grid cell to fit better) - in base canvas coordinates
-  getTokenSize(): number {
-    return this.getGridCellSize() * 0.75; // 75% of grid cell size
-  }
-  
-  // Get grid cell width in pixels (base canvas coordinates)
-  getGridCellWidth(): number {
-    return this.baseCanvasWidth / this.gridSize;
-  }
-  
-  // Get grid cell height in pixels (base canvas coordinates)
-  getGridCellHeight(): number {
-    return this.baseCanvasHeight / this.gridSize;
-  }
-  
-  // Snap a coordinate to the center of the nearest grid cell
-  // coord is in base canvas coordinates (not zoomed)
-  snapToGrid(coord: number, isY: boolean = false): number {
-    const cellSize = isY ? this.getGridCellHeight() : this.getGridCellWidth();
-    
-    // Find which cell the coordinate is in (can be negative for coordinates < 0)
-    const cellIndex = Math.floor(coord / cellSize);
-    
-    // Calculate the center of the current cell
-    const currentCellCenter = cellIndex * cellSize + cellSize / 2;
-    
-    // Calculate the center of the next cell
-    const nextCellCenter = (cellIndex + 1) * cellSize + cellSize / 2;
-    
-    // Calculate the center of the previous cell (for negative coordinates)
-    const prevCellCenter = (cellIndex - 1) * cellSize + cellSize / 2;
-    
-    // Calculate distances to all three possible centers
-    const distToCurrent = Math.abs(coord - currentCellCenter);
-    const distToNext = Math.abs(coord - nextCellCenter);
-    const distToPrev = Math.abs(coord - prevCellCenter);
-    
-    // Return the center of the nearest cell
-    if (distToPrev < distToCurrent && distToPrev < distToNext) {
-      return prevCellCenter;
-    } else if (distToNext < distToCurrent) {
-      return nextCellCenter;
-    } else {
-      return currentCellCenter;
-    }
-  }
-  
-  // Place a token at the clicked position (snapped to grid)
-  placeToken(event: MouseEvent): void {
-    if (!this.mapViewport || !this.mapCanvas) return;
-    
-    const viewport = this.mapViewport.nativeElement;
-    const rect = viewport.getBoundingClientRect();
-    
-    // Get mouse position relative to viewport
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
-    
-    // Calculate position on canvas (accounting for pan only, convert to base canvas coordinates)
-    const canvasX = (mouseX - this.panX) / this.zoomLevel;
-    const canvasY = (mouseY - this.panY) / this.zoomLevel;
-    
-    // Snap to grid cell center (using separate width/height for X/Y)
-    const snappedX = this.snapToGrid(canvasX, false);
-    const snappedY = this.snapToGrid(canvasY, true);
-    
-    // Add token to the list (public tokens for now)
-    this.tokens.push({
-      id: this.nextTokenId++,
-      x: snappedX,
-      y: snappedY,
-      isGmOnly: false
-    });
-    
-    // Save to backend
-    this.saveBattlemap();
-    
-    // Exit token placement mode and restore normal cursor
-    this.isAddingToken = false;
-    if (this.mapViewport) {
-      this.mapViewport.nativeElement.style.cursor = 'grab';
-      this.mapViewport.nativeElement.classList.remove('token-placement-mode');
-    }
-    this.hideTokenCursor();
-  }
-  
-  // Handle mouse up
   onMouseUp(event: MouseEvent): void {
-    if (event.button === 2) { // Right mouse button
+    if (event.button === 2) {
       this.isPanning = false;
-      
-      if (this.mapViewport) {
-        this.mapViewport.nativeElement.style.cursor = 'grab';
-      }
+      this.setViewportCursor('grab');
     } else if (event.button === 0 && this.isDraggingToken) {
-      // Finish token drag and snap to grid
       this.finishTokenDrag(event);
+    } else if (event.button === 0 && this.fogOfWarService.isPainting) {
+      this.stopFogPainting();
     }
   }
   
-  // Handle mouse leave (stop panning/dragging if mouse leaves viewport)
   onMouseLeave(event: MouseEvent): void {
     this.isPanning = false;
     
     if (this.isDraggingToken) {
-      // Finish drag if mouse leaves viewport
       this.finishTokenDrag(event);
     }
     
-    if (this.mapViewport) {
-      this.mapViewport.nativeElement.style.cursor = 'grab';
+    if (this.fogOfWarService.isPainting) {
+      this.stopFogPainting();
     }
+    
+    this.setViewportCursor('grab');
   }
   
-  // Handle wheel zoom
+  /**
+   * Handle wheel zoom
+   */
   onWheel(event: WheelEvent): void {
-    event.preventDefault();
-    
     if (!this.mapViewport || !this.mapCanvas) return;
     
     const viewport = this.mapViewport.nativeElement;
-    const rect = viewport.getBoundingClientRect();
-    
-    // Get mouse position relative to viewport
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
-    
-    // Calculate zoom delta
-    const zoomDelta = event.deltaY > 0 ? -this.ZOOM_SENSITIVITY : this.ZOOM_SENSITIVITY;
-    const newZoom = Math.max(this.MIN_ZOOM, Math.min(this.MAX_ZOOM, this.zoomLevel + zoomDelta));
-    
-    if (newZoom === this.zoomLevel) return;
-    
-    // Store old zoom for calculations
-    const oldZoom = this.zoomLevel;
-    
-    // Calculate the point under the mouse in base canvas coordinates (using OLD zoom and pan)
-    // With CSS transform, we need to account for the transform origin
-    const canvasX = (mouseX - this.panX) / oldZoom;
-    const canvasY = (mouseY - this.panY) / oldZoom;
-    
-    // Apply new zoom level
-    this.zoomLevel = newZoom;
-    
-    // Adjust pan so the same canvas point stays under the mouse
-    // With CSS transform scale, the point scales from the transform origin (0,0)
-    // So we adjust pan to compensate: panX = mouseX - canvasX * newZoom
-    this.panX = mouseX - canvasX * this.zoomLevel;
-    this.panY = mouseY - canvasY * this.zoomLevel;
-    
-    // Mark map as initialized (user has interacted with zoom)
-    this.mapInitialized = true;
-    
-    // Zoom and pan are local only - not saved to backend
-    // Tokens maintain their base positions (token.x, token.y) and are scaled by CSS transform
-    // This ensures tokens stay in the same grid cell when zooming
+    this.viewportService.handleWheel(event, viewport.clientWidth, viewport.clientHeight, this.baseCanvasWidth, this.baseCanvasHeight);
+    this.mapInitialized = true; // Mark map as initialized (user has interacted with zoom)
   }
   
-  // Menu actions
-  onAddToken(): void {
-    this.isAddingToken = !this.isAddingToken;
+  // ============================================================================
+  // Fog of War Management
+  // ============================================================================
+  
+  startFogPainting(event: MouseEvent): void {
+    if (!this.isFogOfWarMode || !this.mapViewport || !this.mapCanvas) return;
     
-    // Update cursor
-    if (this.mapViewport) {
-      if (this.isAddingToken) {
-        this.mapViewport.nativeElement.style.cursor = 'none';
-        this.mapViewport.nativeElement.classList.add('token-placement-mode');
-      } else {
-        this.mapViewport.nativeElement.style.cursor = 'grab';
-        this.mapViewport.nativeElement.classList.remove('token-placement-mode');
-      }
+    this.fogOfWarService.startPainting();
+    this.paintFogCell(event);
+  }
+  
+  paintFogCell(event: MouseEvent): void {
+    if (!this.fogOfWarService.isPainting || !this.mapViewport || !this.mapCanvas) return;
+    
+    const mousePos = this.getMousePosition(event);
+    if (!mousePos) return;
+    
+    const canvasCoords = this.gridService.viewportToCanvas(mousePos.x, mousePos.y, this.panX, this.panY, this.zoomLevel);
+    
+    const gridCellWidth = this.gridService.getGridCellWidth(this.baseCanvasWidth);
+    const gridCellHeight = this.gridService.getGridCellHeight(this.baseCanvasHeight);
+    
+    const gridX = Math.floor(canvasCoords.x / gridCellWidth);
+    const gridY = Math.floor(canvasCoords.y / gridCellHeight);
+    
+    const maxGridX = Math.floor(this.baseCanvasWidth / gridCellWidth);
+    const maxGridY = Math.floor(this.baseCanvasHeight / gridCellHeight);
+    
+    if (gridX >= 0 && gridX < maxGridX && gridY >= 0 && gridY < maxGridY) {
+      this.fogOfWarService.paintCell(gridX, gridY);
+      this.saveBattlemap();
     }
   }
   
+  stopFogPainting(): void {
+    if (this.fogOfWarService.isPainting) {
+      this.fogOfWarService.stopPainting();
+    }
+  }
+  
+  get fogMode(): 'add' | 'remove' {
+    return this.fogOfWarService.fogMode;
+  }
+  
+  get fogRevealedAreas(): Array<{ gridX: number; gridY: number }> {
+    return this.fogOfWarService.getFogAreas();
+  }
+  
+  getRevealedCellPositions(): Array<{ x: number; y: number; width: number; height: number }> {
+    const areas = this.fogRevealedAreas;
+    const gridCellWidth = this.gridService.getGridCellWidth(this.baseCanvasWidth);
+    const gridCellHeight = this.gridService.getGridCellHeight(this.baseCanvasHeight);
+    
+    return areas.map(area => ({
+      x: area.gridX * gridCellWidth,
+      y: area.gridY * gridCellHeight,
+      width: gridCellWidth,
+      height: gridCellHeight
+    }));
+  }
+  
+  getTokenSize(): number {
+    return this.gridService.getTokenSize(this.baseCanvasWidth, this.baseCanvasHeight);
+  }
+  
+  getImageScaleFactor(): number {
+    return this.gridService.getImageScaleFactor();
+  }
+  
+  getTokenImageSize(): number {
+    return this.gridService.getTokenImageSize(this.baseCanvasWidth, this.baseCanvasHeight);
+  }
+  
+  snapToGrid(coord: number, isY: boolean = false): number {
+    return this.gridService.snapToGrid(coord, isY, this.baseCanvasWidth, this.baseCanvasHeight);
+  }
+  
+  // ============================================================================
+  // Token Management
+  // ============================================================================
+  
+  /**
+   * Place a token at the clicked position (snapped to grid)
+   */
+  placeToken(event: MouseEvent): void {
+    if (!this.mapViewport || !this.mapCanvas) return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    if (!this.pendingTokenConfig) {
+      this.exitTokenPlacementMode();
+      return;
+    }
+    
+    const mousePos = this.getMousePosition(event);
+    if (!mousePos) return;
+    
+    const canvasCoords = this.gridService.viewportToCanvas(mousePos.x, mousePos.y, this.panX, this.panY, this.zoomLevel);
+    const snappedX = this.snapToGrid(canvasCoords.x, false);
+    const snappedY = this.snapToGrid(canvasCoords.y, true);
+    
+    const token = {
+      id: this.nextTokenId++,
+      x: snappedX,
+      y: snappedY,
+      isGmOnly: false,
+      color: this.pendingTokenConfig.color,
+      avatarUrl: this.pendingTokenConfig.avatarUrl,
+      borderColor: this.pendingTokenConfig.borderColor,
+      name: this.pendingTokenConfig.name
+    };
+    
+    this.tokens.push(token);
+    this.pendingTokenConfig = null;
+    
+    this.saveBattlemap();
+    this.exitTokenPlacementMode();
+  }
+  
+  
+  // Menu actions
+  onAddToken(): void {
+    // Open the token appearance dialog first to configure the token
+    const tempTokenId = this.nextTokenId++;
+    const tempToken = {
+      id: tempTokenId,
+      x: 0, // Will be set when placed
+      y: 0, // Will be set when placed
+      isGmOnly: false
+    };
+    
+    // Clear any pending config
+    this.pendingTokenConfig = null;
+    
+    // Open the appearance dialog
+    this.openTokenAppearanceDialog(tempToken);
+  }
+  
   onConfigureSize(): void {
-    // TODO: Implement size configuration dialog
-    console.log('Configure size clicked');
-    // For now, show a prompt to change grid size
-    const newSize = prompt(`Enter grid size (current: ${this.gridSize}x${this.gridSize}):`, this.gridSize.toString());
+    const currentSize = this.gridService.gridSize;
+    const newSize = prompt(`Enter grid size (current: ${currentSize}x${currentSize}):`, currentSize.toString());
     if (newSize !== null) {
       const size = parseInt(newSize, 10);
       if (!isNaN(size) && size > 0 && size <= 50) {
-        this.gridSize = size;
+        this.gridService.setGridSize(size);
         this.saveBattlemap();
       }
     }
   }
   
-  // Start dragging a token
+  onSetBackgroundImage(): void {
+    const currentUrl = this.mapImageUrl || '';
+    const newUrl = prompt('Enter background image URL (leave empty to remove):', currentUrl);
+    if (newUrl !== null) {
+      if (newUrl.trim() === '') {
+        this.mapImageUrl = undefined;
+      } else {
+        this.mapImageUrl = newUrl.trim();
+      }
+      this.saveBattlemap();
+    }
+  }
+  
+  onToggleFogOfWar(): void {
+    this.isFogOfWarMode = !this.isFogOfWarMode;
+    this.showFogMenu = false;
+    this.updateFogOfWarCursor();
+  }
+  
+  /**
+   * Update cursor based on fog of war mode
+   */
+  private updateFogOfWarCursor(): void {
+    if (!this.mapViewport) return;
+    
+    if (this.isFogOfWarMode) {
+      this.setViewportCursor(this.fogMode === 'add' ? 'crosshair' : 'not-allowed');
+      this.mapViewport.nativeElement.classList.add('fog-of-war-mode');
+    } else {
+      this.setViewportCursor('grab');
+      this.mapViewport.nativeElement.classList.remove('fog-of-war-mode');
+    }
+  }
+  
+  onFogButtonRightClick(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.showFogMenu = !this.showFogMenu;
+  }
+  
+  setFogMode(mode: 'add' | 'remove'): void {
+    this.fogOfWarService.setFogMode(mode);
+    this.showFogMenu = false;
+    
+    if (this.isFogOfWarMode) {
+      this.setViewportCursor('crosshair');
+    }
+  }
+  
+  getFogButtonTitle(): string {
+    if (!this.isFogOfWarMode) {
+      return 'Fog of War (Right-click to choose mode)';
+    }
+    return this.fogMode === 'add' 
+      ? 'Add Fog Mode - Click to add fog (Right-click to change)' 
+      : 'Remove Fog Mode - Click to reveal areas (Right-click to change)';
+  }
+  
+  
+  onTokenContextMenu(event: MouseEvent, tokenId: number): void {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const token = this.tokens.find(t => t.id === tokenId);
+    if (!token) return;
+    
+    if (this.isGameMaster) {
+      this.isPlayerEditingOwnToken = !!token.characterId;
+      this.openTokenAppearanceDialog(token);
+    } else {
+      if (!token.characterId || token.characterId !== this.playerCharacterId) return;
+      this.isPlayerEditingOwnToken = true;
+      this.openTokenAppearanceDialog(token);
+    }
+  }
+  
+  openTokenAppearanceDialog(token: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string }): void {
+    this.editingToken = { ...token };
+    this.showTokenAppearanceDialog = true;
+  }
+  
+  onTokenAppearanceSaved(config: TokenAppearanceConfig): void {
+    if (!this.editingToken) return;
+    
+    const isNewToken = !this.tokens.find(t => t.id === this.editingToken!.id);
+    
+    if (isNewToken) {
+      this.handleNewTokenConfiguration(config);
+    } else {
+      this.handleExistingTokenUpdate(config);
+    }
+  }
+  
+  private handleNewTokenConfiguration(config: TokenAppearanceConfig): void {
+    this.pendingTokenConfig = config;
+    this.enterTokenPlacementMode();
+    this.closeTokenAppearanceDialog();
+  }
+  
+  private handleExistingTokenUpdate(config: TokenAppearanceConfig): void {
+    const token = this.tokens.find(t => t.id === this.editingToken!.id);
+    if (!token) return;
+    
+    if (this.isPlayerEditingOwnToken) {
+      if (config.borderColor !== undefined) {
+        token.borderColor = config.borderColor;
+      }
+    } else {
+      token.borderColor = config.borderColor;
+      token.avatarUrl = config.avatarUrl;
+      token.color = config.color;
+      if (config.name !== undefined && !token.characterId) {
+        token.name = config.name;
+      }
+    }
+    
+    this.saveBattlemap();
+    this.closeTokenAppearanceDialog();
+  }
+
+  onTokenDeleted(): void {
+    if (!this.editingToken) return;
+    
+    const tokenIndex = this.tokens.findIndex(t => t.id === this.editingToken!.id);
+    if (tokenIndex > -1) {
+      this.tokens.splice(tokenIndex, 1);
+      this.saveBattlemap();
+    }
+    
+    this.closeTokenAppearanceDialog();
+  }
+  
+  // Close token appearance dialog
+  closeTokenAppearanceDialog(): void {
+    const wasConfiguringNewToken = this.editingToken && !this.tokens.find(t => t.id === this.editingToken!.id);
+    
+    this.showTokenAppearanceDialog = false;
+    this.editingToken = null;
+    
+    if (wasConfiguringNewToken && this.pendingTokenConfig !== null && !this.isAddingToken) {
+      this.pendingTokenConfig = null;
+    }
+  }
+  
+  
+  /**
+   * Start dragging a token
+   */
   onTokenMouseDown(event: MouseEvent, tokenId: number): void {
     if (event.button !== 0 || this.isAddingToken) return; // Only left click, and not in placement mode
     
@@ -649,29 +873,18 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
     
     if (!this.mapViewport || !this.mapCanvas) return;
     
-    const viewport = this.mapViewport.nativeElement;
-    const rect = viewport.getBoundingClientRect();
-    
-    // Get mouse position relative to viewport
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
-    
-    // Find the token
     const token = this.tokens.find(t => t.id === tokenId);
     if (!token) return;
     
-    // Token position in base canvas coordinates (tokens are stored at base coordinates)
-    // With CSS transform, tokens are positioned at (token.x, token.y) and scaled by the transform
-    const tokenCanvasX = token.x;
-    const tokenCanvasY = token.y;
+    const mousePos = this.getMousePosition(event);
+    if (!mousePos) return;
     
     // Token position in viewport coordinates (accounting for CSS transform: translate + scale)
-    const tokenViewportX = this.panX + tokenCanvasX * this.zoomLevel;
-    const tokenViewportY = this.panY + tokenCanvasY * this.zoomLevel;
+    const tokenViewportCoords = this.gridService.canvasToViewport(token.x, token.y, this.panX, this.panY, this.zoomLevel);
     
     // Calculate offset from token center to mouse position (in viewport coordinates)
-    const offsetX = mouseX - tokenViewportX;
-    const offsetY = mouseY - tokenViewportY;
+    const offsetX = mousePos.x - tokenViewportCoords.x;
+    const offsetY = mousePos.y - tokenViewportCoords.y;
     
     // Convert offset to base canvas coordinates
     const canvasOffsetX = offsetX / this.zoomLevel;
@@ -680,42 +893,38 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
     // Start dragging
     this.isDraggingToken = true;
     this.draggedTokenId = tokenId;
-    this.dragStartX = mouseX;
-    this.dragStartY = mouseY;
+    this.dragStartX = mousePos.x;
+    this.dragStartY = mousePos.y;
     // Store just the offset (not the absolute position) so token follows mouse smoothly
     this.dragStartTokenX = canvasOffsetX;
     this.dragStartTokenY = canvasOffsetY;
     
-    // Change cursor
-    if (this.mapViewport) {
-      this.mapViewport.nativeElement.style.cursor = 'grabbing';
-    }
+    this.setViewportCursor('grabbing');
   }
   
-  // Update token position during drag
+  /**
+   * Update token position during drag
+   */
   updateTokenDrag(event: MouseEvent): void {
     if (!this.mapViewport || !this.mapCanvas || this.draggedTokenId === null) return;
     
-    const viewport = this.mapViewport.nativeElement;
-    const rect = viewport.getBoundingClientRect();
-    
-    // Get mouse position relative to viewport
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
+    const mousePos = this.getMousePosition(event);
+    if (!mousePos) return;
     
     // Convert mouse position to base canvas coordinates
-    const canvasX = (mouseX - this.panX) / this.zoomLevel;
-    const canvasY = (mouseY - this.panY) / this.zoomLevel;
+    const canvasCoords = this.gridService.viewportToCanvas(mousePos.x, mousePos.y, this.panX, this.panY, this.zoomLevel);
     
     // Update token position (subtract the offset to maintain relative position)
     const token = this.tokens.find(t => t.id === this.draggedTokenId);
     if (token) {
-      token.x = canvasX - this.dragStartTokenX;
-      token.y = canvasY - this.dragStartTokenY;
+      token.x = canvasCoords.x - this.dragStartTokenX;
+      token.y = canvasCoords.y - this.dragStartTokenY;
     }
   }
   
-  // Finish dragging and snap to grid
+  /**
+   * Finish dragging and snap to grid
+   */
   finishTokenDrag(event: MouseEvent): void {
     if (this.draggedTokenId === null) return;
     
@@ -724,19 +933,13 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
       // Snap to grid
       token.x = this.snapToGrid(token.x, false);
       token.y = this.snapToGrid(token.y, true);
-      
-      // Save to backend
       this.saveBattlemap();
     }
     
     // Reset drag state
     this.isDraggingToken = false;
     this.draggedTokenId = null;
-    
-    // Restore cursor
-    if (this.mapViewport) {
-      this.mapViewport.nativeElement.style.cursor = 'grab';
-    }
+    this.setViewportCursor('grab');
   }
 
   // Handle drag over event (allow drop)
@@ -770,123 +973,152 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  // Handle drop event (create token from character)
+  /**
+   * Handle drop event (create token from character)
+   */
   onDrop(event: DragEvent): void {
     event.preventDefault();
     event.stopPropagation();
     
     if (!this.mapViewport || !this.mapCanvas || !event.dataTransfer) return;
     
-    // Remove drag-over class
+    this.removeDragOverClass();
+    
+    const characterData = this.parseCharacterData(event.dataTransfer);
+    if (!characterData) return;
+    
+    const position = this.getSnappedDropPosition(event);
+    if (!position) return;
+    
+    this.updateOrCreateTokenFromDrop(characterData, position);
+    this.saveBattlemap();
+  }
+  
+  private removeDragOverClass(): void {
     if (this.mapViewport) {
       this.mapViewport.nativeElement.classList.remove('drag-over');
     }
+  }
+  
+  private parseCharacterData(dataTransfer: DataTransfer): { characterId: number; characterName: string; avatarUrl: string } | null {
+    const data = dataTransfer.getData('application/json');
+    if (!data) return null;
     
-    // Get character data from drag event
-    const data = event.dataTransfer.getData('application/json');
-    if (!data) return;
-    
-    let characterData: { characterId: number; characterName: string; avatarUrl: string };
     try {
-      characterData = JSON.parse(data);
+      return JSON.parse(data);
     } catch (e) {
       console.error('Failed to parse character data from drag event:', e);
-      return;
+      return null;
     }
+  }
+  
+  private getSnappedDropPosition(event: DragEvent): { x: number; y: number } | null {
+    const mousePos = this.getMousePosition(event as any);
+    if (!mousePos) return null;
     
-    const viewport = this.mapViewport.nativeElement;
-    const rect = viewport.getBoundingClientRect();
-    
-    // Get mouse position relative to viewport
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
-    
-    // Calculate position on canvas (accounting for pan only, convert to base canvas coordinates)
-    const canvasX = (mouseX - this.panX) / this.zoomLevel;
-    const canvasY = (mouseY - this.panY) / this.zoomLevel;
-    
-    // Snap to grid cell center
-    const snappedX = this.snapToGrid(canvasX, false);
-    const snappedY = this.snapToGrid(canvasY, true);
-    
-    // Check if a token with this character ID already exists
+    const canvasCoords = this.gridService.viewportToCanvas(mousePos.x, mousePos.y, this.panX, this.panY, this.zoomLevel);
+    return {
+      x: this.snapToGrid(canvasCoords.x, false),
+      y: this.snapToGrid(canvasCoords.y, true)
+    };
+  }
+  
+  private updateOrCreateTokenFromDrop(characterData: { characterId: number; characterName: string; avatarUrl: string }, position: { x: number; y: number }): void {
     const existingToken = this.tokens.find(t => t.id === characterData.characterId);
     
     if (existingToken) {
-      // Update existing token position and avatar
-      existingToken.x = snappedX;
-      existingToken.y = snappedY;
-      existingToken.avatarUrl = characterData.avatarUrl;
-      existingToken.characterId = characterData.characterId;
+      this.updateExistingTokenFromDrop(existingToken, characterData, position);
     } else {
-      // Create new token using character ID as token ID
-      this.tokens.push({
-        id: characterData.characterId,
-        x: snappedX,
-        y: snappedY,
-        isGmOnly: false,
-        characterId: characterData.characterId,
-        avatarUrl: characterData.avatarUrl
-      });
-      
-      // Update nextTokenId if needed
-      if (characterData.characterId >= this.nextTokenId) {
-        this.nextTokenId = characterData.characterId + 1;
-      }
+      this.createTokenFromDrop(characterData, position);
     }
+  }
+  
+  private updateExistingTokenFromDrop(token: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string }, characterData: { characterId: number; characterName: string; avatarUrl: string }, position: { x: number; y: number }): void {
+    token.x = position.x;
+    token.y = position.y;
+    token.avatarUrl = characterData.avatarUrl;
+    token.characterId = characterData.characterId;
+    token.name = characterData.characterName;
+  }
+  
+  private createTokenFromDrop(characterData: { characterId: number; characterName: string; avatarUrl: string }, position: { x: number; y: number }): void {
+    this.tokens.push({
+      id: characterData.characterId,
+      x: position.x,
+      y: position.y,
+      isGmOnly: false,
+      characterId: characterData.characterId,
+      avatarUrl: characterData.avatarUrl,
+      name: characterData.characterName
+    });
     
-    // Save to backend
-    this.saveBattlemap();
+    if (characterData.characterId >= this.nextTokenId) {
+      this.nextTokenId = characterData.characterId + 1;
+    }
   }
 
-  // Load avatar URLs for tokens that have character IDs
   loadTokenAvatars(): void {
     if (!this.sessionId) return;
     
-    // Get unique character IDs from tokens
-    const characterIds = this.tokens
-      .filter(t => t.characterId && !t.avatarUrl)
-      .map(t => t.characterId!)
-      .filter((id, index, self) => self.indexOf(id) === index); // Unique
-    
-    if (characterIds.length === 0) return;
-    
-    // Load all characters for the session
     this.characterService.getAllCharacters(undefined, this.sessionId).subscribe({
       next: (characters: Character[]) => {
-        // Create a map of character ID to avatar URL
-        const avatarMap = new Map<number, string>();
-        characters.forEach(char => {
-          if (char.id) {
-            avatarMap.set(char.id, this.getAvatarUrl(char));
-          }
-        });
-        
-        // Update tokens with avatar URLs
-        this.tokens.forEach(token => {
-          if (token.characterId && !token.avatarUrl) {
-            const avatarUrl = avatarMap.get(token.characterId);
-            if (avatarUrl) {
-              token.avatarUrl = avatarUrl;
-            }
-          }
-        });
+        const { characterMap, avatarMap } = this.buildCharacterMaps(characters);
+        this.updateTokensWithCharacterData(characterMap, avatarMap);
       },
       error: (err) => {
         console.error('Error loading character avatars for tokens:', err);
       }
     });
   }
+  
+  private buildCharacterMaps(characters: Character[]): { characterMap: Map<number, Character>; avatarMap: Map<number, string> } {
+    const characterMap = new Map<number, Character>();
+    const avatarMap = new Map<number, string>();
+    
+    characters.forEach(char => {
+      if (char.id) {
+        characterMap.set(char.id, char);
+        avatarMap.set(char.id, this.getAvatarUrl(char));
+      }
+    });
+    
+    return { characterMap, avatarMap };
+  }
+  
+  private updateTokensWithCharacterData(characterMap: Map<number, Character>, avatarMap: Map<number, string>): void {
+    this.tokens.forEach(token => {
+      if (characterMap.has(token.id)) {
+        token.characterId = token.id;
+        const character = characterMap.get(token.id);
+        if (character && !token.name) {
+          token.name = character.name;
+        }
+        if (!token.avatarUrl && !token.color) {
+          const avatarUrl = avatarMap.get(token.id);
+          if (avatarUrl) {
+            token.avatarUrl = avatarUrl;
+          }
+        }
+      }
+    });
+  }
 
-  // Get avatar URL for a character
   getAvatarUrl(character: Character): string {
     if (character.avatarUrl && character.avatarUrl.trim() !== '') {
-      // If it's a relative URL, prepend the API base URL
       if (character.avatarUrl.startsWith('/')) {
         return `${environment.apiUrl.replace('/api', '')}${character.avatarUrl}`;
       }
       return character.avatarUrl;
     }
     return `${environment.apiUrl.replace('/api', '')}/api/char`;
+  }
+  
+  getTokenAvatarUrl(avatarUrl: string | undefined): string {
+    if (!avatarUrl) return '';
+    
+    if (avatarUrl.startsWith('/')) {
+      return `${environment.apiUrl.replace('/api', '')}${avatarUrl}`;
+    }
+    return avatarUrl;
   }
 }

@@ -13,6 +13,7 @@ public class BattlemapDto {
     private Integer canvasHeight;
     private String mapImageUrl;
     private List<BattlemapTokenDto> tokens;
+    private List<FogRevealedAreaDto> fogRevealedAreas;
 
     public BattlemapDto() {
     }
@@ -26,13 +27,25 @@ public class BattlemapDto {
         this.mapImageUrl = battlemap.getMapImageUrl();
         if (battlemap.getTokens() != null) {
             this.tokens = battlemap.getTokens().stream()
-                    .map(token -> new BattlemapTokenDto(
+                    .map(token -> {
+                        BattlemapTokenDto dto = new BattlemapTokenDto(
                             token.getId(),
                             token.getTokenId(),
                             token.getX(),
                             token.getY(),
                             token.getIsGmOnly()
-                    ))
+                        );
+                        dto.setColor(token.getColor());
+                        dto.setAvatarUrl(token.getAvatarUrl());
+                        dto.setBorderColor(token.getBorderColor());
+                        dto.setName(token.getName());
+                        return dto;
+                    })
+                    .collect(Collectors.toList());
+        }
+        if (battlemap.getFogRevealedAreas() != null) {
+            this.fogRevealedAreas = battlemap.getFogRevealedAreas().stream()
+                    .map(FogRevealedAreaDto::new)
                     .collect(Collectors.toList());
         }
     }
@@ -91,5 +104,13 @@ public class BattlemapDto {
 
     public void setTokens(List<BattlemapTokenDto> tokens) {
         this.tokens = tokens;
+    }
+
+    public List<FogRevealedAreaDto> getFogRevealedAreas() {
+        return fogRevealedAreas;
+    }
+
+    public void setFogRevealedAreas(List<FogRevealedAreaDto> fogRevealedAreas) {
+        this.fogRevealedAreas = fogRevealedAreas;
     }
 }

@@ -4,6 +4,15 @@ export interface BattlemapToken {
   x: number;
   y: number;
   isGmOnly: boolean;
+  color?: string;
+  avatarUrl?: string;
+  borderColor?: string;
+  name?: string;
+}
+
+export interface FogRevealedArea {
+  gridX: number;
+  gridY: number;
 }
 
 export interface Battlemap {
@@ -14,4 +23,5 @@ export interface Battlemap {
   canvasHeight?: number;
   mapImageUrl?: string;
   tokens?: BattlemapToken[];
+  fogRevealedAreas?: FogRevealedArea[];
 }
