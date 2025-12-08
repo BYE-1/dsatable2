@@ -117,6 +117,7 @@
 							<artifactId>spring-boot-devtools</artifactId>
 						</exclude>
 					</excludes>
+					<mainClass>de.byedev.dsatable2.dsa_table_backend.DsaTableBackendApplication</mainClass>
 				</configuration>
 				<executions>
 					<execution>

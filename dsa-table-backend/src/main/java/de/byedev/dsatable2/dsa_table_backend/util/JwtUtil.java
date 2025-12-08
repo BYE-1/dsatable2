@@ -8,6 +8,8 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -16,7 +18,7 @@ import java.util.function.Function;
 @Component
 public class JwtUtil {
 
-    @Value("${jwt.secret:mySecretKeyForJWTTokenGenerationThatShouldBeAtLeast256BitsLongForHS256Algorithm}")
+    @Value("${jwt.secret:mySecretKeyForJWTTokenGenerationThatShouldBeAtLeast512BitsLongForHS512AlgorithmPleaseUseASecureRandomKeyInProduction}")
     private String secret;
 
     @Value("${jwt.expiration:86400000}") // 24 hours default
@@ -24,6 +26,17 @@ public class JwtUtil {
 
     private SecretKey getSigningKey() {
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        // HS512 requires at least 64 bytes (512 bits)
+        if (keyBytes.length < 64) {
+            // Derive a 64-byte key using SHA-512 hash of the secret
+            // This ensures we have a proper 64-byte key while maintaining security
+            try {
+                MessageDigest digest = MessageDigest.getInstance("SHA-512");
+                keyBytes = digest.digest(keyBytes);
+            } catch (NoSuchAlgorithmException e) {
+                throw new RuntimeException("SHA-512 algorithm not available", e);
+            }
+        }
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
