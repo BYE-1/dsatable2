@@ -16,6 +16,7 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
@@ -32,6 +33,7 @@ public class DsaTableBackendApplication {
 
 	@SuppressWarnings("unused")
 	@Bean
+	@Transactional
 	CommandLineRunner initData(UserRepository userRepository,
 							   GameSessionRepository gameSessionRepository,
 							   CharacterRepository characterRepository,
@@ -59,33 +61,50 @@ public class DsaTableBackendApplication {
 
 			// 2. Ensure dummy session
 			String sessionTitle = "Demo Session";
+			GameSession session;
 			Optional<GameSession> existingSession = gameSessionRepository.findAll().stream()
 					.filter(s -> sessionTitle.equals(s.getTitle()))
 					.findFirst();
 
-			GameSession session = existingSession.orElseGet(() -> {
-				GameSession s = new GameSession();
-				s.setTitle(sessionTitle);
-				s.setDescription("Demo game session seeded on startup");
-				s.setGameMasterId(user.getId());
-				s.setPlayerIds(new java.util.HashSet<>());
-				GameSession saved = gameSessionRepository.save(s);
+			if (existingSession.isPresent()) {
+				// Reload the session to ensure playerIds collection is loaded
+				session = gameSessionRepository.findById(existingSession.get().getId())
+						.orElseGet(() -> {
+							GameSession s = new GameSession();
+							s.setTitle(sessionTitle);
+							s.setDescription("Demo game session seeded on startup");
+							s.setGameMasterId(user.getId());
+							s.setPlayerIds(new java.util.HashSet<>());
+							return gameSessionRepository.save(s);
+						});
+			} else {
+				session = new GameSession();
+				session.setTitle(sessionTitle);
+				session.setDescription("Demo game session seeded on startup");
+				session.setGameMasterId(user.getId());
+				session.setPlayerIds(new java.util.HashSet<>());
+				session = gameSessionRepository.save(session);
 				LOG.info("Created demo session '{}'", sessionTitle);
-				return saved;
-			});
+			}
 
 			// Ensure session has correct GM and initialize playerIds if null
+			boolean needsSave = false;
 			if (!user.getId().equals(session.getGameMasterId())) {
 				session.setGameMasterId(user.getId());
+				needsSave = true;
 			}
 			if (session.getPlayerIds() == null) {
 				session.setPlayerIds(new java.util.HashSet<>());
+				needsSave = true;
 			}
 			// Ensure user2 is in the players list
 			if (!session.getPlayerIds().contains(user2.getId())) {
 				session.getPlayerIds().add(user2.getId());
+				needsSave = true;
 			}
-			gameSessionRepository.save(session);
+			if (needsSave) {
+				gameSessionRepository.save(session);
+			}
 
 			// 3. Ensure demo character from XML (GM's character - should NOT be in session)
 			String heroName = "Fenia Fuxfell";
