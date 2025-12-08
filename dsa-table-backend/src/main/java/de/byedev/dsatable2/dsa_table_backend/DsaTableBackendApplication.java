@@ -40,8 +40,24 @@ public class DsaTableBackendApplication {
 							   CharacterRepository characterRepository,
 							   PasswordEncoder passwordEncoder) {
 		return args -> {
-			// 1. Ensure default users
+			// Check if data already exists - if so, skip initialization
 			String defaultUsername = "demo";
+			String sessionTitle = "Demo Session";
+			String heroName = "Fenia Fuxfell";
+			String krixnixName = "Krixnix";
+			
+			boolean hasUser = userRepository.findByUsername(defaultUsername).isPresent();
+			boolean hasSession = gameSessionRepository.findAll().stream()
+					.anyMatch(s -> sessionTitle.equals(s.getTitle()));
+			boolean hasFenia = characterRepository.findByName(heroName).isPresent();
+			boolean hasKrixnix = characterRepository.findByName(krixnixName).isPresent();
+			
+			if (hasUser && hasSession && hasFenia && hasKrixnix) {
+				LOG.debug("Demo data already exists, skipping initialization");
+				return;
+			}
+			
+			// 1. Ensure default users
 			User user = userRepository.findByUsername(defaultUsername)
 					.orElseGet(() -> {
 					User u = new User(defaultUsername, "Demo User", passwordEncoder.encode("demo123"));
@@ -61,7 +77,6 @@ public class DsaTableBackendApplication {
 					});
 
 			// 2. Ensure dummy session
-			String sessionTitle = "Demo Session";
 			GameSession session;
 			Optional<GameSession> existingSession = gameSessionRepository.findAll().stream()
 					.filter(s -> sessionTitle.equals(s.getTitle()))
@@ -114,7 +129,6 @@ public class DsaTableBackendApplication {
 			}
 
 			// 3. Ensure demo character from XML (GM's character - should NOT be in session)
-			String heroName = "Fenia Fuxfell";
 			Optional<Character> existingFenia = characterRepository.findByName(heroName);
 			if (existingFenia.isPresent()) {
 				Character c = existingFenia.get();
@@ -150,7 +164,6 @@ public class DsaTableBackendApplication {
 			}
 
 			// 4. Ensure Krixnix character from XML for demo2 user (player's character - should be in session)
-			String krixnixName = "Krixnix";
 			Optional<Character> existingKrixnix = characterRepository.findByName(krixnixName);
 			if (existingKrixnix.isPresent()) {
 				Character c = existingKrixnix.get();
