@@ -376,7 +376,13 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
 
     const isGM = this.session?.gameMaster?.id === this.currentUserId;
     
-    // Check if user has a character in this session (GMs might also have characters)
+    // Skip API call for GMs - they don't need to join with a character
+    if (isGM) {
+      this.showCharacterSelection = false;
+      return;
+    }
+    
+    // Check if user has a character in this session
     this.gameSessionService.getMyCharacter(this.sessionId).subscribe({
       next: (character: Character | null) => {
         if (character) {
@@ -386,19 +392,16 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
           if (character.id) {
             this.loadFullCharacter(character.id);
           }
-        } else if (!isGM) {
+        } else {
           // Non-GM users need to join, show character selection
           this.loadAvailableCharacters();
           this.showCharacterSelection = true;
         }
-        // GMs without characters in session don't need to join
       },
       error: (err: any) => {
-        // If error and not GM, assume user hasn't joined
-        if (!isGM) {
-          this.loadAvailableCharacters();
-          this.showCharacterSelection = true;
-        }
+        // If error, assume user hasn't joined
+        this.loadAvailableCharacters();
+        this.showCharacterSelection = true;
       }
     });
   }

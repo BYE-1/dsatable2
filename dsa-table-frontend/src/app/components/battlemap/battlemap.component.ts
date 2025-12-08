@@ -128,15 +128,20 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
   }
   
   loadPlayerCharacter(): void {
-    if (!this.sessionId || this.isGameMaster) return;
+    if (!this.sessionId || this.isGameMaster) {
+      return;
+    }
     
     this.gameSessionService.getMyCharacter(this.sessionId).subscribe({
       next: (character) => {
-        if (character) {
+        if (character && !this.isGameMaster) {
           this.playerCharacterId = character.id || null;
         }
       },
       error: (error) => {
+        if (this.isGameMaster || error.status === 404) {
+          return;
+        }
         console.error('Error loading player character:', error);
       }
     });

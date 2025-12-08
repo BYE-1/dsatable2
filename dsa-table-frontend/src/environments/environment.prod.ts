@@ -1,6 +1,6 @@
 export const environment = {
   production: true,
-  apiUrl: 'http://localhost:8080/api' // Update this with your production backend URL
+  apiUrl: '/api' // Relative path - backend is served from the same domain
 };
 
 
