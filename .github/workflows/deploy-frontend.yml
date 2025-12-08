@@ -46,17 +46,22 @@ jobs:
           
           echo "Setting API URL to: $API_URL"
           # Update the apiUrl in environment.prod.ts
-          sed -i "s|apiUrl: '.*'|apiUrl: '$API_URL'|g" src/environments/environment.prod.ts
+          # Handle both single and double quotes, and comments
+          sed -i "s|apiUrl: ['\"].*['\"]|apiUrl: '$API_URL'|g" src/environments/environment.prod.ts
+          # Also remove any trailing comments on the same line
+          sed -i "s|apiUrl: '$API_URL'.*|apiUrl: '$API_URL'|g" src/environments/environment.prod.ts
           # Verify the change
           echo "Updated environment.prod.ts:"
-          grep "apiUrl:" src/environments/environment.prod.ts
-          # Also verify the file was actually modified
-          if ! grep -q "$API_URL" src/environments/environment.prod.ts; then
+          cat src/environments/environment.prod.ts
+          # Verify the API URL was set correctly
+          if ! grep -q "apiUrl: '$API_URL'" src/environments/environment.prod.ts; then
             echo "ERROR: Failed to update API URL in environment.prod.ts"
+            echo "Expected: apiUrl: '$API_URL'"
             echo "Current content:"
             cat src/environments/environment.prod.ts
             exit 1
           fi
+          echo "✓ Successfully updated API URL to: $API_URL"
 
       - name: Update base href for production
         working-directory: dsa-table-frontend
