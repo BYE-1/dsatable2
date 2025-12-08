@@ -71,11 +71,11 @@ export class CharacterCardComponent {
   getAvatarUrl(): string {
     if (this.character.avatarUrl && this.character.avatarUrl.trim() !== '') {
       if (this.character.avatarUrl.startsWith('/')) {
-        return `${environment.apiUrl.replace('/api', '')}${this.character.avatarUrl}`;
+        return `${environment.apiUrl}${this.character.avatarUrl.replace('/api', '')}`;
       }
       return this.character.avatarUrl;
     }
-    return `${environment.apiUrl.replace('/api', '')}/api/char`;
+    return `${environment.apiUrl}/char`;
   }
 
   openAvatarDialog(event?: Event): void {

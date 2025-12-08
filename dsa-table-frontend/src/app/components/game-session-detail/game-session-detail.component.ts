@@ -944,11 +944,11 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
     if (character.avatarUrl && character.avatarUrl.trim() !== '') {
       // If it's a relative URL, prepend the API base URL
       if (character.avatarUrl.startsWith('/')) {
-        return `${environment.apiUrl.replace('/api', '')}${character.avatarUrl}`;
+        return `${environment.apiUrl}${character.avatarUrl.replace('/api', '')}`;
       }
       return character.avatarUrl;
     }
-    return `${environment.apiUrl.replace('/api', '')}/api/char`;
+    return `${environment.apiUrl}/char`;
   }
 
   getLifePercentage(character: Character): number {

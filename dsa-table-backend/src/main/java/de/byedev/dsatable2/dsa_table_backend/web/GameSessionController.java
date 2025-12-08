@@ -230,13 +230,21 @@ public class GameSessionController {
     }
 
     @GetMapping("/{id}/battlemap")
-    @Transactional(readOnly = true)
-    @Cacheable(value = "battlemaps", key = "#id")
+    @Transactional
     public ResponseEntity<BattlemapDto> getBattlemap(@PathVariable Long id) {
-        return battlemapRepository.findBySessionId(id)
-                .map(BattlemapDto::new)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        // Verify session exists
+        if (!gameSessionRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        // Get or create battlemap if it doesn't exist
+        Battlemap battlemap = battlemapRepository.findBySessionId(id)
+                .orElseGet(() -> {
+                    Battlemap newBattlemap = new Battlemap(id);
+                    return battlemapRepository.save(newBattlemap);
+                });
+        
+        return ResponseEntity.ok(new BattlemapDto(battlemap));
     }
 
     @PutMapping("/{id}/battlemap")

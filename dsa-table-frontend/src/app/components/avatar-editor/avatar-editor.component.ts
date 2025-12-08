@@ -304,7 +304,7 @@ export class AvatarEditorComponent implements OnInit {
       params.set('equip', this.avatarOptions.equip.join(','));
     }
     const queryString = params.toString();
-    return `${environment.apiUrl.replace('/api', '')}/api/char${queryString ? '?' + queryString : ''}`;
+    return `${environment.apiUrl}/char${queryString ? '?' + queryString : ''}`;
   }
 
   buildAvatarUrl(): string {

@@ -1122,7 +1122,7 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
     if (!avatarUrl) return '';
     
     if (avatarUrl.startsWith('/')) {
-      return `${environment.apiUrl.replace('/api', '')}${avatarUrl}`;
+      return `${environment.apiUrl}${avatarUrl.replace('/api', '')}`;
     }
     return avatarUrl;
   }
