@@ -69,9 +69,38 @@ jobs:
           # Update base href in index.html to /dsatable2/
           sed -i 's|<base href="/">|<base href="/dsatable2/">|g' src/index.html
 
+      - name: Verify environment file before build
+        working-directory: dsa-table-frontend
+        run: |
+          echo "=== Verifying environment.prod.ts ==="
+          cat src/environments/environment.prod.ts
+          if ! grep -q "apiUrl: '/api" src/environments/environment.prod.ts; then
+            echo "ERROR: environment.prod.ts does not contain expected API URL"
+            exit 1
+          fi
+          echo "✓ Environment file verified"
+
       - name: Build Angular application
         working-directory: dsa-table-frontend
         run: npm run build -- --configuration production --base-href /dsatable2/
+
+      - name: Verify production build uses correct environment
+        working-directory: dsa-table-frontend
+        run: |
+          echo "=== Checking built files for API URL ==="
+          # Search for the API URL in the built JavaScript files
+          if grep -r "localhost:8080" dist/dsa-table-frontend/browser/ 2>/dev/null; then
+            echo "⚠ WARNING: Found localhost:8080 in built files - this should not happen in production!"
+            echo "This might indicate the wrong environment file was used."
+          else
+            echo "✓ No localhost:8080 found in production build - good!"
+          fi
+          # Check if relative path /api is present
+          if grep -r "'/api'" dist/dsa-table-frontend/browser/ 2>/dev/null | head -1; then
+            echo "✓ Found relative API path '/api' in production build"
+          else
+            echo "⚠ WARNING: Could not find '/api' in built files"
+          fi
 
       - name: Create deployment archive
         working-directory: dsa-table-frontend
