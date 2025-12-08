@@ -15,6 +15,7 @@ import de.byedev.dsatable2.dsa_table_backend.web.dto.BattlemapDto;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.BattlemapTokenDto;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.FogRevealedAreaDto;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.GameSessionDto;
+import org.hibernate.Hibernate;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.ResponseEntity;
@@ -63,6 +64,8 @@ public class GameSessionController {
         } else {
             sessions = gameSessionRepository.findAll();
         }
+        // Initialize playerIds collections before creating DTOs
+        sessions.forEach(session -> Hibernate.initialize(session.getPlayerIds()));
         return sessions.stream()
                 .map(session -> new GameSessionDto(session, userRepository, battlemapRepository))
                 .collect(Collectors.toList());
@@ -73,7 +76,11 @@ public class GameSessionController {
     @Cacheable(value = "gameSessions", key = "#id")
     public ResponseEntity<GameSessionDto> getById(@PathVariable Long id) {
         return gameSessionRepository.findById(id)
-                .map(session -> new GameSessionDto(session, userRepository, battlemapRepository))
+                .map(session -> {
+                    // Initialize playerIds collection before creating DTO
+                    Hibernate.initialize(session.getPlayerIds());
+                    return new GameSessionDto(session, userRepository, battlemapRepository);
+                })
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -122,6 +129,8 @@ public class GameSessionController {
     public ResponseEntity<GameSessionDto> update(@PathVariable Long id, @RequestBody GameSession updated) {
         return gameSessionRepository.findById(id)
                 .map(existing -> {
+                    // Initialize playerIds collection before modifying
+                    Hibernate.initialize(existing.getPlayerIds());
                     existing.setTitle(updated.getTitle());
                     existing.setDescription(updated.getDescription());
                     if (updated.getGameMasterId() != null) {
@@ -131,6 +140,8 @@ public class GameSessionController {
                         existing.setPlayerIds(updated.getPlayerIds());
                     }
                     GameSession saved = gameSessionRepository.save(existing);
+                    // Initialize collection in saved entity before creating DTO
+                    Hibernate.initialize(saved.getPlayerIds());
                     return ResponseEntity.ok(new GameSessionDto(saved, userRepository, battlemapRepository));
                 })
                 .orElse(ResponseEntity.notFound().build());
@@ -176,6 +187,9 @@ public class GameSessionController {
             return ResponseEntity.notFound().build();
         }
 
+        // Force initialization of playerIds collection
+        Hibernate.initialize(session.getPlayerIds());
+
         // Check if user is the GM
         if (session.getGameMasterId() != null && session.getGameMasterId().equals(userId)) {
             return ResponseEntity.badRequest().build(); // GM doesn't need to join
@@ -203,8 +217,9 @@ public class GameSessionController {
             // If it's the same character, just ensure they're in the players list
             if (existingCharacter.getId().equals(characterId)) {
                 // Character already assigned, just ensure user is in players list
-                if (!session.getPlayerIds().contains(userId)) {
-                    session.getPlayerIds().add(userId);
+                java.util.Set<Long> playerIds = session.getPlayerIds();
+                if (!playerIds.contains(userId)) {
+                    playerIds.add(userId);
                     gameSessionRepository.save(session);
                 }
                 return ResponseEntity.ok(new GameSessionDto(session, userRepository, battlemapRepository));
@@ -221,8 +236,9 @@ public class GameSessionController {
         characterRepository.save(character);
 
         // Add user to players if not already there
-        if (!session.getPlayerIds().contains(userId)) {
-            session.getPlayerIds().add(userId);
+        java.util.Set<Long> playerIds = session.getPlayerIds();
+        if (!playerIds.contains(userId)) {
+            playerIds.add(userId);
             gameSessionRepository.save(session);
         }
 

@@ -9,6 +9,7 @@ import de.byedev.dsatable2.dsa_table_backend.repository.UserRepository;
 import de.byedev.dsatable2.dsa_table_backend.util.HeroXMLParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.hibernate.Hibernate;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -77,6 +78,8 @@ public class DsaTableBackendApplication {
 							s.setPlayerIds(new java.util.HashSet<>());
 							return gameSessionRepository.save(s);
 						});
+				// Force initialization of playerIds collection using Hibernate.initialize()
+				Hibernate.initialize(session.getPlayerIds());
 			} else {
 				session = new GameSession();
 				session.setTitle(sessionTitle);
@@ -93,13 +96,17 @@ public class DsaTableBackendApplication {
 				session.setGameMasterId(user.getId());
 				needsSave = true;
 			}
-			if (session.getPlayerIds() == null) {
+			// Ensure playerIds collection is initialized
+			java.util.Set<Long> playerIds = session.getPlayerIds();
+			Hibernate.initialize(playerIds);
+			if (playerIds == null) {
 				session.setPlayerIds(new java.util.HashSet<>());
+				playerIds = session.getPlayerIds();
 				needsSave = true;
 			}
 			// Ensure user2 is in the players list
-			if (!session.getPlayerIds().contains(user2.getId())) {
-				session.getPlayerIds().add(user2.getId());
+			if (!playerIds.contains(user2.getId())) {
+				playerIds.add(user2.getId());
 				needsSave = true;
 			}
 			if (needsSave) {
