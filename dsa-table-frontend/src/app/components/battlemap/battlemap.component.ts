@@ -1110,20 +1110,46 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
 
   getAvatarUrl(character: Character): string {
     if (character.avatarUrl && character.avatarUrl.trim() !== '') {
+      // If already a full URL, return as-is
+      if (character.avatarUrl.startsWith('http://') || character.avatarUrl.startsWith('https://')) {
+        return character.avatarUrl;
+      }
+      
+      // If already contains the base API path, return as-is
+      if (character.avatarUrl.startsWith(environment.apiUrl)) {
+        return character.avatarUrl;
+      }
+      
       if (character.avatarUrl.startsWith('/')) {
-        return `${environment.apiUrl.replace('/api', '')}${character.avatarUrl}`;
+        // Remove /api prefix if present, then add the base API URL
+        const path = character.avatarUrl.replace(/^\/api/, '');
+        return `${environment.apiUrl}${path}`;
       }
       return character.avatarUrl;
     }
-    return `${environment.apiUrl.replace('/api', '')}/api/char`;
+    return `${environment.apiUrl}/char`;
   }
   
   getTokenAvatarUrl(avatarUrl: string | undefined): string {
     if (!avatarUrl) return '';
     
-    if (avatarUrl.startsWith('/')) {
-      return `${environment.apiUrl}${avatarUrl.replace('/api', '')}`;
+    // If already a full URL (starts with http:// or https://), return as-is
+    if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
+      return avatarUrl;
     }
+    
+    // If already contains the base API path, return as-is
+    if (avatarUrl.startsWith(environment.apiUrl)) {
+      return avatarUrl;
+    }
+    
+    // If it's a relative path starting with /, construct the full URL
+    if (avatarUrl.startsWith('/')) {
+      // Remove /api prefix if present, then add the base API URL
+      const path = avatarUrl.replace(/^\/api/, '');
+      return `${environment.apiUrl}${path}`;
+    }
+    
     return avatarUrl;
   }
 }
