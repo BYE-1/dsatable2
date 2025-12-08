@@ -32,19 +32,16 @@ jobs:
       - name: Update production API URL
         working-directory: dsa-table-frontend
         run: |
-          # Update environment.prod.ts with production API URL (port 8083)
-          # Use PRODUCTION_API_URL secret if set, otherwise construct from SERVER_HOST with port 8083
+          # Update environment.prod.ts with relative API URL
+          # Use PRODUCTION_API_URL secret if set (allows override for custom paths),
+          # otherwise use relative path /api (backend served from same domain)
           PROD_API_URL="${{ secrets.PRODUCTION_API_URL }}"
-          SERVER_HOST="${{ secrets.SERVER_HOST }}"
           
           if [ -n "$PROD_API_URL" ] && [ "$PROD_API_URL" != "" ]; then
             API_URL="$PROD_API_URL"
-          elif [ -n "$SERVER_HOST" ] && [ "$SERVER_HOST" != "" ]; then
-            # Remove protocol if present and add http:// with port 8083
-            SERVER_HOST=$(echo "$SERVER_HOST" | sed 's|^https\?://||')
-            API_URL="http://${SERVER_HOST}:8083/api/dsatable2"
           else
-            API_URL="http://localhost:8083/api/dsatable2"
+            # Use relative path - backend is served from the same domain
+            API_URL="/api/dsatable"
           fi
           
           echo "Setting API URL to: $API_URL"
