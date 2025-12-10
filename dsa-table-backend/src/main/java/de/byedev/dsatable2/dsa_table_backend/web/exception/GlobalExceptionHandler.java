@@ -13,6 +13,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.context.request.ServletWebRequest;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -269,25 +271,106 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handle runtime exceptions with detailed logging
+     */
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<ErrorResponse> handleRuntimeException(
+            RuntimeException ex, WebRequest request) {
+        
+        String requestUri = request.getDescription(false).replace("uri=", "");
+        String httpMethod = "UNKNOWN";
+        String clientAddress = "UNKNOWN";
+        
+        // Extract HTTP method and client info if available
+        if (request instanceof ServletWebRequest) {
+            HttpServletRequest httpRequest = ((ServletWebRequest) request).getRequest();
+            httpMethod = httpRequest.getMethod();
+            clientAddress = httpRequest.getRemoteAddr();
+        }
+        
+        // Log with full context including stack trace
+        LOG.error("RuntimeException occurred - Endpoint: {} | Method: {} | Client: {} | Message: {}", 
+                requestUri, 
+                httpMethod,
+                clientAddress,
+                ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName(), 
+                ex);
+        
+        // Log the cause if present
+        if (ex.getCause() != null) {
+            LOG.error("Caused by: {} - {}", 
+                    ex.getCause().getClass().getSimpleName(),
+                    ex.getCause().getMessage(), 
+                    ex.getCause());
+        }
+        
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                "Internal Server Error",
+                ex.getMessage() != null ? ex.getMessage() : "An unexpected runtime error occurred",
+                requestUri
+        );
+        
+        // Include exception details in debug mode
+        if (LOG.isDebugEnabled()) {
+            errorResponse.setDetails(java.util.Map.of(
+                    "exception", ex.getClass().getSimpleName(),
+                    "message", ex.getMessage() != null ? ex.getMessage() : "No message",
+                    "cause", ex.getCause() != null ? ex.getCause().getClass().getSimpleName() : "None",
+                    "method", httpMethod
+            ));
+        }
+        
+        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    /**
      * Handle all other exceptions (generic fallback)
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex, WebRequest request) {
         
-        LOG.error("Unexpected error occurred", ex);
+        String requestUri = request.getDescription(false).replace("uri=", "");
+        String httpMethod = "UNKNOWN";
+        String clientAddress = "UNKNOWN";
+        
+        // Extract HTTP method and client info if available
+        if (request instanceof ServletWebRequest) {
+            HttpServletRequest httpRequest = ((ServletWebRequest) request).getRequest();
+            httpMethod = httpRequest.getMethod();
+            clientAddress = httpRequest.getRemoteAddr();
+        }
+        
+        LOG.error("Unexpected error occurred - Endpoint: {} | Method: {} | Client: {} | Type: {}", 
+                requestUri,
+                httpMethod,
+                clientAddress,
+                ex.getClass().getSimpleName(),
+                ex);
+        
+        // Log the cause if present
+        if (ex.getCause() != null) {
+            LOG.error("Caused by: {} - {}", 
+                    ex.getCause().getClass().getSimpleName(),
+                    ex.getCause().getMessage(), 
+                    ex.getCause());
+        }
         
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 "Internal Server Error",
                 "An unexpected error occurred. Please try again later.",
-                request.getDescription(false).replace("uri=", "")
+                requestUri
         );
         
         // In production, don't expose internal error details
         // In development, you might want to include ex.getMessage()
         if (LOG.isDebugEnabled()) {
-            errorResponse.setDetails(java.util.Map.of("exception", ex.getClass().getSimpleName()));
+            errorResponse.setDetails(java.util.Map.of(
+                    "exception", ex.getClass().getSimpleName(),
+                    "method", httpMethod
+            ));
         }
         
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
