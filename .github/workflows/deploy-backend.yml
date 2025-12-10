@@ -23,6 +23,39 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      - name: Update production API base URL
+        working-directory: dsa-table-backend
+        run: |
+          # Update application-prod.properties with API base URL
+          # Use PRODUCTION_API_BASE_URL secret if set (allows override for custom domains),
+          # otherwise use default https://byedev.de/api
+          PROD_API_BASE_URL="${{ secrets.PRODUCTION_API_BASE_URL }}"
+          
+          if [ -n "$PROD_API_BASE_URL" ] && [ "$PROD_API_BASE_URL" != "" ]; then
+            API_BASE_URL="$PROD_API_BASE_URL"
+          else
+            # Default to production domain
+            API_BASE_URL="https://byedev.de/api"
+          fi
+          
+          echo "Setting API base URL to: $API_BASE_URL"
+          
+          # Update the app.api.base-url in deployment/application-prod.properties
+          if [ -f "../deployment/application-prod.properties" ]; then
+            # Use sed to update the property, handling both existing and new lines
+            if grep -q "^app.api.base-url=" "../deployment/application-prod.properties"; then
+              # Property exists, update it
+              sed -i "s|^app.api.base-url=.*|app.api.base-url=$API_BASE_URL|g" "../deployment/application-prod.properties"
+            else
+              # Property doesn't exist, add it before the logging section
+              sed -i "/^# Logging configuration/i app.api.base-url=$API_BASE_URL\n" "../deployment/application-prod.properties"
+            fi
+            echo "Updated deployment/application-prod.properties:"
+            grep "^app.api.base-url=" "../deployment/application-prod.properties" || echo "Warning: Property not found after update"
+          else
+            echo "Warning: deployment/application-prod.properties not found, skipping API base URL update"
+          fi
+
       - name: Build with Maven
         working-directory: dsa-table-backend
         run: mvn clean package -DskipTests
@@ -33,6 +66,20 @@ jobs:
           mkdir -p deploy
           cp target/dsa-table-backend-*.jar deploy/dsa-table-backend.jar
           cp src/main/resources/application.properties deploy/application.properties.example
+          # Copy production properties file if it exists (from deployment directory)
+          if [ -f "../deployment/application-prod.properties" ]; then
+            cp "../deployment/application-prod.properties" deploy/application-prod.properties
+            echo "Copied production properties file to deploy/"
+            # Verify API base URL is set
+            if grep -q "^app.api.base-url=" deploy/application-prod.properties; then
+              echo "✓ API base URL in production properties:"
+              grep "^app.api.base-url=" deploy/application-prod.properties
+            else
+              echo "⚠ Warning: app.api.base-url not found in production properties"
+            fi
+          else
+            echo "⚠ Warning: ../deployment/application-prod.properties not found"
+          fi
 
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
@@ -41,7 +88,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
-          source: "dsa-table-backend/deploy/dsa-table-backend.jar"
+          source: "dsa-table-backend/deploy/*"
           target: "/tmp/dsa-table-backend-deploy"
           strip_components: 2
           rm: true
@@ -115,6 +162,25 @@ jobs:
             else
               # Try without sudo if user owns the directory
               chown "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR/dsa-table-backend.jar" 2>/dev/null || true
+            fi
+            
+            # Copy production properties file if it exists in deploy directory
+            CONFIG_DIR="$APP_DIR/config"
+            run_cmd mkdir -p "$CONFIG_DIR"
+            if [ -f "$DEPLOY_DIR/application-prod.properties" ]; then
+              run_cmd cp "$DEPLOY_DIR/application-prod.properties" "$CONFIG_DIR/application-prod.properties"
+              echo "Copied production properties to $CONFIG_DIR/application-prod.properties"
+              # Verify the API base URL is set
+              if grep -q "^app.api.base-url=" "$CONFIG_DIR/application-prod.properties"; then
+                echo "✓ API base URL configured:"
+                grep "^app.api.base-url=" "$CONFIG_DIR/application-prod.properties"
+              else
+                echo "⚠ Warning: app.api.base-url not found in production properties"
+              fi
+            else
+              echo "⚠ Warning: application-prod.properties not found in deploy directory"
+              echo "Contents of deploy directory:"
+              ls -la "$DEPLOY_DIR" || echo "Deploy directory does not exist"
             fi
             
             # Verify file was copied

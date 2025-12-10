@@ -199,7 +199,7 @@ public class BattlemapImageController {
         if (StringUtils.isNotBlank(token.getEnvType())) {
             // Reconstruct environment object URL from properties using base URL
             try {
-                StringBuilder urlBuilder = new StringBuilder(baseUrl).append("/api/env-object?type=");
+                StringBuilder urlBuilder = new StringBuilder(baseUrl).append("/env-object?type=");
                 urlBuilder.append(URLEncoder.encode(token.getEnvType(), StandardCharsets.UTF_8));
                 if (StringUtils.isNotBlank(token.getEnvColor())) {
                     urlBuilder.append("&color=").append(URLEncoder.encode(token.getEnvColor(), StandardCharsets.UTF_8));
