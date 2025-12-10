@@ -81,6 +81,12 @@ header {
     }
   }
   
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  
   .user-section {
     display: flex;
     align-items: center;
@@ -144,5 +150,3 @@ main {
   overflow: hidden;
   min-height: 0;
 }
-
-

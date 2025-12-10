@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { TranslateModule } from '@ngx-translate/core';
 import { GameSessionService } from '../../services/game-session.service';
 import { AuthService } from '../../services/auth.service';
 import { GameSession } from '../../models/game-session.model';
@@ -8,7 +9,7 @@ import { GameSession } from '../../models/game-session.model';
 @Component({
   selector: 'app-game-session-list',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   templateUrl: './game-session-list.component.html',
   styleUrl: './game-session-list.component.scss'
 })

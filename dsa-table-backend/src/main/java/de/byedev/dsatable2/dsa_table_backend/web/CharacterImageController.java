@@ -135,6 +135,7 @@ public class CharacterImageController {
 
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("image/svg+xml"))
+                .header("Cache-Control", "public, max-age=604800") // Cache for 7 days
                 .body(svgContent);
     }
 

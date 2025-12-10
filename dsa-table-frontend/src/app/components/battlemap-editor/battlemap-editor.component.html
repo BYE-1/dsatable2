@@ -1,0 +1,277 @@
+<div class="battlemap-editor">
+  <div class="editor-container">
+    <!-- Left Panel: Controls -->
+    <div class="editor-controls">
+      <h3>Map Editor</h3>
+
+      <!-- Background Section -->
+      <div class="control-section">
+        <h4>Background</h4>
+        
+        
+        <div class="form-row">
+          <div class="form-group form-group-inline">
+            <label for="grid-width">Grid Width (cells)</label>
+            <input
+              id="grid-width"
+              type="number"
+              [(ngModel)]="gridWidth"
+              (ngModelChange)="onGridSizeChange()"
+              min="1"
+              max="100"
+              class="form-control"
+            />
+            <small class="form-hint">{{ gridWidth * 32 }}px</small>
+          </div>
+          
+          <div class="form-group form-group-inline">
+            <label for="grid-height">Grid Height (cells)</label>
+            <input
+              id="grid-height"
+              type="number"
+              [(ngModel)]="gridHeight"
+              (ngModelChange)="onGridSizeChange()"
+              min="1"
+              max="100"
+              class="form-control"
+            />
+            <small class="form-hint">{{ gridHeight * 32 }}px</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Environment Objects List -->
+      <div class="control-section">
+        <div class="section-header">
+          <h4>Objects ({{ environmentObjects.length }})</h4>
+          <button
+            type="button"
+            (click)="openAddObjectDialog()"
+            class="btn btn-add"
+            title="Add environment object"
+          >
+            + Add
+          </button>
+        </div>
+        <div class="objects-list">
+          <div
+            *ngFor="let obj of environmentObjects"
+            class="object-item"
+            [class.selected]="selectedObjectId === obj.id"
+            (click)="selectObject(obj.id)"
+          >
+            <div class="object-preview">
+              <img
+                [src]="getEnvironmentObjectUrl(obj)"
+                [alt]="getObjectTypeLabel(obj.type)"
+                [attr.title]="getObjectTypeLabel(obj.type)"
+                class="object-preview-img"
+                loading="lazy"
+              />
+            </div>
+            <div class="object-details">
+              <div class="object-type">{{ getObjectTypeLabel(obj.type) }}</div>
+              <div class="object-position" *ngIf="selectedObjectId === obj.id">
+                X: <input
+                  type="number"
+                  [value]="obj.x"
+                  (input)="updateObjectPosition(obj.id, +$any($event.target).value, obj.y)"
+                  (click)="$event.stopPropagation()"
+                  class="position-input"
+                  min="0"
+                  [max]="gridWidth * 32"
+                  title="X position"
+                  placeholder="X"
+                />
+                Y: <input
+                  type="number"
+                  [value]="obj.y"
+                  (input)="updateObjectPosition(obj.id, obj.x, +$any($event.target).value)"
+                  (click)="$event.stopPropagation()"
+                  class="position-input"
+                  min="0"
+                  [max]="gridHeight * 32"
+                  title="Y position"
+                  placeholder="Y"
+                />
+              </div>
+            </div>
+            <div *ngIf="selectedObjectId === obj.id" class="object-actions-selected" (click)="$event.stopPropagation()">
+              <input
+                type="color"
+                [value]="obj.color || defaultColors[obj.type]"
+                (input)="updateObjectProperty(obj.id, 'color', $any($event.target).value)"
+                class="color-input-small"
+                title="Change color"
+                aria-label="Change object color"
+              />
+              <button
+                type="button"
+                (click)="removeObject(obj.id)"
+                class="btn-remove"
+                title="Remove object"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <div *ngIf="environmentObjects.length === 0" class="empty-list">
+            No objects added yet
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel: Preview and Toolbar -->
+    <div class="editor-preview-section">
+      <div class="editor-preview">
+        <div class="preview-container">
+          <!-- Grid and Brush Controls -->
+          <div class="preview-controls" (click)="$event.stopPropagation()">
+            <!-- Grid Toggle Button -->
+            <button
+              type="button"
+              class="preview-control-btn grid-toggle-btn"
+              [class.active]="showGrid"
+              (click)="toggleGrid()"
+              title="Toggle grid"
+              aria-label="Toggle grid"
+            >
+              <span class="grid-icon">⊞</span>
+            </button>
+            
+            <!-- Brush Tool Button -->
+            <button
+              type="button"
+              class="preview-control-btn brush-toggle-btn"
+              [class.active]="isBrushActive"
+              (click)="isBrushActive = !isBrushActive"
+              (contextmenu)="showBrushContextMenu($event); $event.preventDefault()"
+              [title]="'Brush: ' + getBackgroundTypeName(selectedBackgroundType) + ' (Right-click to change)'"
+              aria-label="Brush tool"
+            >
+              <div class="brush-icon" [style.background-color]="getBackgroundTypeColor(selectedBackgroundType)"></div>
+            </button>
+          </div>
+          
+          <!-- Brush Type Selection Menu -->
+          <div
+            *ngIf="showBrushMenu"
+            class="brush-menu"
+            [style.left.px]="brushMenuPosition.x"
+            [style.top.px]="brushMenuPosition.y"
+            (click)="$event.stopPropagation()"
+          >
+            <div
+              *ngFor="let bgType of [BackgroundTypes.DEFAULT, BackgroundTypes.GRASS, BackgroundTypes.EARTH, BackgroundTypes.ROCK, BackgroundTypes.SAND]"
+              class="brush-menu-item"
+              [class.active]="selectedBackgroundType === bgType"
+              (click)="selectBackgroundTypeFromMenu(bgType)"
+            >
+              <div class="brush-menu-color" [style.background-color]="getBackgroundTypeColor(bgType)"></div>
+              <span class="brush-menu-label">{{ getBackgroundTypeName(bgType) }}</span>
+            </div>
+          </div>
+          
+          <div
+            #previewSvgContainer
+            class="preview-svg-container"
+            [style.display]="previewSvgContent ? 'flex' : 'none'"
+            [class.has-selection]="selectedObjectId !== null"
+            [class.brush-active]="isBrushActive"
+            (click)="onPreviewClick($event)"
+            (mousedown)="onPreviewMouseDown($event)"
+            (mousemove)="onPreviewMouseMove($event)"
+            (mouseup)="onPreviewMouseUp($event)"
+            (mouseleave)="onPreviewMouseLeave($event)"
+            (dragover)="onDragOver($event)"
+            (drop)="onDrop($event)"
+          >
+            <div *ngIf="selectedObjectId !== null" class="selection-hint">
+              Click to place selected object
+            </div>
+          </div>
+          <div *ngIf="!previewSvgContent && !previewUrl" class="preview-empty">
+            No preview available
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Toolbar with Environment Objects -->
+      <div class="editor-toolbar">
+        <div class="toolbar-label">Environment Objects:</div>
+        <div class="toolbar-items">
+          <div
+            *ngFor="let objType of availableObjectTypes"
+            class="toolbar-item"
+            draggable="true"
+            (dragstart)="onDragStart($event, objType)"
+            (dragend)="onDragEnd($event)"
+            [title]="objType.label"
+          >
+            <img
+              [src]="getToolbarObjectUrl(objType)"
+              [alt]="objType.label"
+              [title]="objType.label"
+              class="toolbar-item-img"
+              draggable="false"
+              (dragstart)="$event.preventDefault()"
+            />
+            <span class="toolbar-item-label">{{ objType.label }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <!-- Add Object Dialog -->
+  <div *ngIf="showAddObjectDialog" class="dialog-overlay" (click)="closeAddObjectDialog()">
+    <div class="dialog" (click)="$event.stopPropagation()">
+      <div class="dialog-header">
+        <h4>Add Environment Object</h4>
+        <button type="button" class="dialog-close" (click)="closeAddObjectDialog()" title="Close">✕</button>
+      </div>
+      <div class="dialog-content">
+        <div class="form-group">
+          <label for="object-type">Type</label>
+          <select
+            id="object-type"
+            [(ngModel)]="newObjectType"
+            (ngModelChange)="onObjectTypeChange($event)"
+            class="form-control"
+          >
+            <option *ngFor="let objType of availableObjectTypes" [value]="objType.type">
+              {{ objType.label }}
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="object-color">Color</label>
+          <input
+            id="object-color"
+            type="color"
+            [(ngModel)]="newObjectColor"
+            class="form-control color-input"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="object-size">Size</label>
+          <input
+            id="object-size"
+            type="number"
+            [(ngModel)]="newObjectSize"
+            min="20"
+            max="200"
+            class="form-control"
+          />
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" (click)="closeAddObjectDialog()" class="btn btn-secondary">Cancel</button>
+        <button type="button" (click)="addObject()" class="btn btn-primary">Add Object</button>
+      </div>
+    </div>
+  </div>
+</div>
+

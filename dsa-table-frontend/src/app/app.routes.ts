@@ -6,6 +6,7 @@ import { GameSessionListComponent } from './components/game-session-list/game-se
 import { GameSessionDetailComponent } from './components/game-session-detail/game-session-detail.component';
 import { GameSessionFormComponent } from './components/game-session-form/game-session-form.component';
 import { HomeComponent } from './components/home/home.component';
+import { MapEditorPageComponent } from './components/map-editor-page/map-editor-page.component';
 import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
@@ -16,5 +17,6 @@ export const routes: Routes = [
   { path: 'sessions', component: GameSessionListComponent, canActivate: [authGuard] },
   { path: 'sessions/new', component: GameSessionFormComponent, canActivate: [authGuard] },
   { path: 'sessions/:id', component: GameSessionDetailComponent, canActivate: [authGuard] },
-  { path: 'sessions/:id/edit', component: GameSessionFormComponent, canActivate: [authGuard] }
+  { path: 'sessions/:id/edit', component: GameSessionFormComponent, canActivate: [authGuard] },
+  { path: 'map-editor', component: MapEditorPageComponent, canActivate: [authGuard] }
 ];

@@ -2,12 +2,13 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, TranslateModule],
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss'
 })
@@ -19,7 +20,8 @@ export class LoginComponent {
   constructor(
     private fb: FormBuilder,
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private translateService: TranslateService
   ) {
     this.loginForm = this.fb.group({
       username: ['', [Validators.required]],
@@ -40,7 +42,7 @@ export class LoginComponent {
           if (error.status === 0 || error.message?.includes('Failed to fetch') || error.message?.includes('ERR_CONNECTION_REFUSED')) {
             this.errorMessage = 'Cannot connect to server. Please make sure the backend is running on http://localhost:8080';
           } else {
-            this.errorMessage = error.error?.error || 'Login failed. Please try again.';
+            this.errorMessage = error.error?.error || this.translateService.instant('auth.loginFailed');
           }
           this.isLoading = false;
         }

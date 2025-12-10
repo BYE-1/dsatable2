@@ -16,7 +16,7 @@
         class="message" 
         [class.own-message]="isOwnMessage(message)">
         <div class="message-header">
-          <span class="author-name">{{ message.author.displayName || 'Unknown' }}</span>
+          <span class="author-name">{{ message.author.displayName || ('common.unknown' | translate) }}</span>
           <span class="message-time">{{ formatTime(message.createdAt) }}</span>
         </div>
         <div class="message-content">{{ message.message }}</div>
@@ -24,12 +24,12 @@
     </div>
 
     <div *ngIf="messages.length === 0" class="empty-state">
-      <p>No messages yet. Start the conversation!</p>
+      <p>{{ 'chat.noMessages' | translate }}</p>
     </div>
   </div>
 
   <div *ngIf="loading" class="loading">
-    Loading messages...
+    {{ 'chat.loadingMessages' | translate }}
   </div>
 
   <div class="chat-input-container">
@@ -37,7 +37,7 @@
       #messageInput
       [(ngModel)]="newMessage"
       (keydown)="onKeyPress($event)"
-      placeholder="Type a message... (Press Enter to send)"
+      [placeholder]="'chat.typeMessage' | translate"
       class="message-input"
       [disabled]="sending"
       rows="1"
@@ -47,8 +47,8 @@
       (click)="sendMessage()" 
       [disabled]="!newMessage.trim() || sending"
       class="send-button">
-      <span *ngIf="!sending">Send</span>
-      <span *ngIf="sending">Sending...</span>
+      <span *ngIf="!sending">{{ 'chat.sendMessage' | translate }}</span>
+      <span *ngIf="sending">{{ 'chat.sending' | translate }}</span>
     </button>
   </div>
 </div>

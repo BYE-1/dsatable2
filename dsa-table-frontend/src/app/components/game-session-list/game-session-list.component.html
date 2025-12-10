@@ -1,7 +1,7 @@
 <div class="session-list-container">
   <div class="header-section">
-    <h1>Game Sessions</h1>
-    <button class="btn btn-primary" (click)="navigateToCreate()">Create New Session</button>
+    <h1>{{ 'session.sessions' | translate }}</h1>
+    <button class="btn btn-primary" (click)="navigateToCreate()">{{ 'session.createNewSession' | translate }}</button>
   </div>
 
   <div class="filter-section">
@@ -9,23 +9,23 @@
       class="filter-btn" 
       [class.active]="filterMode === 'all'"
       (click)="onFilterChange('all')">
-      All Sessions
+      {{ 'session.allSessions' | translate }}
     </button>
     <button 
       class="filter-btn" 
       [class.active]="filterMode === 'gm'"
       (click)="onFilterChange('gm')">
-      My Sessions (GM)
+      {{ 'session.mySessions' | translate }}
     </button>
     <button 
       class="filter-btn" 
       [class.active]="filterMode === 'player'"
       (click)="onFilterChange('player')">
-      Joined Sessions
+      {{ 'session.joinedSessions' | translate }}
     </button>
   </div>
 
-  <div *ngIf="loading" class="loading">Loading game sessions...</div>
+  <div *ngIf="loading" class="loading">{{ 'session.loadingSessions' | translate }}</div>
   
   <div *ngIf="error" class="error-message">
     {{ error }}
@@ -39,7 +39,7 @@
       <div class="session-header">
         <h3>{{ session.title }}</h3>
         <div class="session-badges">
-          <span *ngIf="isGameMaster(session)" class="badge badge-gm">GM</span>
+          <span *ngIf="isGameMaster(session)" class="badge badge-gm">{{ 'session.gameMaster' | translate }}</span>
         </div>
       </div>
       
@@ -49,13 +49,13 @@
       
       <div class="session-info">
         <div class="info-item">
-          <strong>Game Master:</strong> {{ session.gameMaster?.displayName || 'Unknown' }}
+          <strong>{{ 'session.gameMaster' | translate }}:</strong> {{ session.gameMaster?.displayName || ('common.unknown' | translate) }}
         </div>
         <div class="info-item" *ngIf="session.characters && session.characters.length > 0">
-          <strong>Characters:</strong> {{ session.characters.length }}
+          <strong>{{ 'session.characters' | translate }}:</strong> {{ session.characters.length }}
         </div>
         <div class="info-item" *ngIf="session.createdAt">
-          <strong>Created:</strong> {{ formatDate(session.createdAt) }}
+          <strong>{{ 'session.created' | translate }}:</strong> {{ formatDate(session.createdAt) }}
         </div>
       </div>
 
@@ -63,20 +63,20 @@
         <button 
           class="btn btn-secondary"
           (click)="navigateToSession(session.id!)">
-          View Details
+          {{ 'session.viewDetails' | translate }}
         </button>
         <button 
           *ngIf="isGameMaster(session)"
           class="btn btn-danger"
           (click)="deleteSession(session.id!, $event)">
-          Delete
+          {{ 'common.delete' | translate }}
         </button>
       </div>
     </div>
 
     <div *ngIf="sessions.length === 0" class="empty-state">
-      <p>No game sessions found.</p>
-      <button class="btn btn-primary" (click)="navigateToCreate()">Create Your First Session</button>
+      <p>{{ 'session.noSessionsFound' | translate }}</p>
+      <button class="btn btn-primary" (click)="navigateToCreate()">{{ 'session.createFirstSession' | translate }}</button>
     </div>
   </div>
 </div>

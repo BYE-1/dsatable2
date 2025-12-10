@@ -1,6 +1,6 @@
 <div class="character-list">
   <div class="header-section">
-    <h2>Characters</h2>
+    <h2>{{ 'character.characters' | translate }}</h2>
     <div class="upload-section">
       <div 
         class="drop-zone compact"
@@ -16,14 +16,14 @@
         />
         <label for="xml-file-input" class="file-upload-label-compact">
           <span class="upload-icon">📄</span>
-          <span *ngIf="!selectedFile">Upload XML</span>
+          <span *ngIf="!selectedFile">{{ 'character.uploadXml' | translate }}</span>
           <span *ngIf="selectedFile" class="file-name-compact">{{ selectedFile.name }}</span>
         </label>
         <button 
           *ngIf="selectedFile" 
           (click)="clearFileSelection()" 
           class="btn-clear-compact"
-          title="Clear file">
+          [title]="'character.clearFile' | translate">
           ✕
         </button>
         <button
@@ -31,7 +31,7 @@
           (click)="uploadCharacter()"
           [disabled]="uploading"
           class="btn-upload-compact"
-          title="Upload character">
+          [title]="'character.uploadCharacter' | translate">
           <span *ngIf="!uploading">✓</span>
           <span *ngIf="uploading">...</span>
         </button>
@@ -42,16 +42,16 @@
     </div>
   </div>
   
-  <div *ngIf="loading" class="loading">Loading characters...</div>
+  <div *ngIf="loading" class="loading">{{ 'character.loadingCharacters' | translate }}</div>
   
   <div *ngIf="error" class="error">
     <p>{{ error }}</p>
-    <button (click)="loadCharacters()">Retry</button>
+    <button (click)="loadCharacters()">{{ 'common.retry' | translate }}</button>
   </div>
   
   <div *ngIf="!loading && !error">
     <div *ngIf="characters.length === 0" class="empty">
-      <p>No characters found. Upload an XML file to create a character.</p>
+      <p>{{ 'character.noCharactersUpload' | translate }}</p>
     </div>
     
     <div *ngIf="characters.length > 0" class="characters-grid">

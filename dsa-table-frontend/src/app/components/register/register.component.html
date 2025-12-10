@@ -1,10 +1,10 @@
 <div class="register-container">
   <div class="register-card">
-    <h2>Register</h2>
+    <h2>{{ 'auth.register' | translate }}</h2>
     
     <form [formGroup]="registerForm" (ngSubmit)="onSubmit()">
       <div class="form-group">
-        <label for="username">Username</label>
+        <label for="username">{{ 'auth.username' | translate }}</label>
         <input
           id="username"
           type="text"
@@ -13,13 +13,13 @@
           [class.error]="registerForm.get('username')?.invalid && registerForm.get('username')?.touched"
         />
         <div *ngIf="registerForm.get('username')?.invalid && registerForm.get('username')?.touched" class="error-message">
-          <span *ngIf="registerForm.get('username')?.errors?.['required']">Username is required</span>
-          <span *ngIf="registerForm.get('username')?.errors?.['minlength']">Username must be at least 3 characters</span>
+          <span *ngIf="registerForm.get('username')?.errors?.['required']">{{ 'auth.usernameRequired' | translate }}</span>
+          <span *ngIf="registerForm.get('username')?.errors?.['minlength']">{{ 'auth.usernameMinLength' | translate }}</span>
         </div>
       </div>
 
       <div class="form-group">
-        <label for="displayName">Display Name</label>
+        <label for="displayName">{{ 'auth.displayName' | translate }}</label>
         <input
           id="displayName"
           type="text"
@@ -28,13 +28,13 @@
           [class.error]="registerForm.get('displayName')?.invalid && registerForm.get('displayName')?.touched"
         />
         <div *ngIf="registerForm.get('displayName')?.invalid && registerForm.get('displayName')?.touched" class="error-message">
-          <span *ngIf="registerForm.get('displayName')?.errors?.['required']">Display name is required</span>
-          <span *ngIf="registerForm.get('displayName')?.errors?.['minlength']">Display name must be at least 2 characters</span>
+          <span *ngIf="registerForm.get('displayName')?.errors?.['required']">{{ 'auth.displayNameRequired' | translate }}</span>
+          <span *ngIf="registerForm.get('displayName')?.errors?.['minlength']">{{ 'auth.displayNameMinLength' | translate }}</span>
         </div>
       </div>
 
       <div class="form-group">
-        <label for="password">Password</label>
+        <label for="password">{{ 'auth.password' | translate }}</label>
         <input
           id="password"
           type="password"
@@ -43,13 +43,13 @@
           [class.error]="registerForm.get('password')?.invalid && registerForm.get('password')?.touched"
         />
         <div *ngIf="registerForm.get('password')?.invalid && registerForm.get('password')?.touched" class="error-message">
-          <span *ngIf="registerForm.get('password')?.errors?.['required']">Password is required</span>
-          <span *ngIf="registerForm.get('password')?.errors?.['minlength']">Password must be at least 6 characters</span>
+          <span *ngIf="registerForm.get('password')?.errors?.['required']">{{ 'auth.passwordRequired' | translate }}</span>
+          <span *ngIf="registerForm.get('password')?.errors?.['minlength']">{{ 'auth.passwordMinLength' | translate }}</span>
         </div>
       </div>
 
       <div class="form-group">
-        <label for="confirmPassword">Confirm Password</label>
+        <label for="confirmPassword">{{ 'auth.confirmPassword' | translate }}</label>
         <input
           id="confirmPassword"
           type="password"
@@ -58,8 +58,8 @@
           [class.error]="registerForm.get('confirmPassword')?.invalid && registerForm.get('confirmPassword')?.touched || registerForm.errors?.['passwordMismatch']"
         />
         <div *ngIf="(registerForm.get('confirmPassword')?.invalid && registerForm.get('confirmPassword')?.touched) || registerForm.errors?.['passwordMismatch']" class="error-message">
-          <span *ngIf="registerForm.get('confirmPassword')?.errors?.['required']">Please confirm your password</span>
-          <span *ngIf="registerForm.errors?.['passwordMismatch'] && registerForm.get('confirmPassword')?.touched">Passwords do not match</span>
+          <span *ngIf="registerForm.get('confirmPassword')?.errors?.['required']">{{ 'auth.confirmPasswordRequired' | translate }}</span>
+          <span *ngIf="registerForm.errors?.['passwordMismatch'] && registerForm.get('confirmPassword')?.touched">{{ 'auth.passwordsDoNotMatch' | translate }}</span>
         </div>
       </div>
 
@@ -68,13 +68,13 @@
       </div>
 
       <button type="submit" class="btn btn-primary" [disabled]="registerForm.invalid || isLoading">
-        <span *ngIf="!isLoading">Register</span>
-        <span *ngIf="isLoading">Registering...</span>
+        <span *ngIf="!isLoading">{{ 'auth.register' | translate }}</span>
+        <span *ngIf="isLoading">{{ 'auth.registering' | translate }}</span>
       </button>
     </form>
 
     <div class="login-link">
-      Already have an account? <a routerLink="/login">Login here</a>
+      {{ 'auth.alreadyHaveAccount' | translate }} <a routerLink="/login">{{ 'auth.loginHere' | translate }}</a>
     </div>
   </div>
 </div>

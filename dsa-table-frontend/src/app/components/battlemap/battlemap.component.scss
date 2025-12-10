@@ -157,6 +157,62 @@
   }
 }
 
+// Right Side Menu (for everyone)
+.battlemap-right-menu {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  
+  .tool-button {
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid #d9d0c0;
+    border-radius: 8px;
+    padding: 0.625rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+    color: #5a4a3a;
+    width: 40px;
+    height: 40px;
+    
+    &:hover {
+      background: rgba(255, 255, 255, 1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transform: translateY(-1px);
+      color: #2d5016;
+    }
+    
+    &:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    }
+    
+    &.active {
+      background: rgba(107, 159, 61, 0.2);
+      border-color: rgba(107, 159, 61, 0.4);
+      color: #2d5016;
+      
+      &:hover {
+        background: rgba(107, 159, 61, 0.3);
+      }
+    }
+    
+    svg {
+      display: block;
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+    }
+  }
+}
+
 // Viewport: handles mouse events, contains scrollable area
 .map-viewport {
   &.drag-over {
@@ -232,6 +288,21 @@
     border: 1px solid #d9d0c0;
     display: block;
   }
+  
+  .map-svg {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #d9d0c0;
+    display: block;
+    
+    ::ng-deep svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+  }
 }
 
 .layer-grid {
@@ -288,6 +359,25 @@
   // Public tokens visible to everyone
 }
 
+.token-name-label {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  margin-bottom: 4px;
+  padding: 1px 4px;
+  background: rgba(0, 0, 0, 0.15);
+  color: #ffffff;
+  border-radius: 3px;
+  font-family: 'Kalam', cursive;
+  font-size: 0.65rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 12;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  line-height: 1.2;
+}
+
 // Tokens
 .token {
   position: absolute;
@@ -337,6 +427,7 @@
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
     transition: none; // Disable transition during drag for smooth movement
   }
+  
   
   &.token-gm-only {
     background: #8b0000;

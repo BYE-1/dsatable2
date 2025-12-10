@@ -1,15 +1,29 @@
 package de.byedev.dsatable2.dsa_table_backend.web.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public class BattlemapTokenDto {
     private Long id;
+    @JsonProperty("tid")
     private Long tokenId;
     private Double x;
     private Double y;
+    @JsonProperty("gm")
     private Boolean isGmOnly;
     private String color;
+    @JsonProperty("url")
     private String avatarUrl;
+    @JsonProperty("bc")
     private String borderColor;
     private String name;
+    
+    // Environment object properties (alternative to avatarUrl for reconstruction)
+    @JsonProperty("et")
+    private String envType;
+    @JsonProperty("ec")
+    private String envColor;
+    @JsonProperty("es")
+    private Integer envSize;
 
     public BattlemapTokenDto() {
     }
@@ -92,5 +106,29 @@ public class BattlemapTokenDto {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getEnvType() {
+        return envType;
+    }
+
+    public void setEnvType(String envType) {
+        this.envType = envType;
+    }
+
+    public String getEnvColor() {
+        return envColor;
+    }
+
+    public void setEnvColor(String envColor) {
+        this.envColor = envColor;
+    }
+
+    public Integer getEnvSize() {
+        return envSize;
+    }
+
+    public void setEnvSize(Integer envSize) {
+        this.envSize = envSize;
     }
 }

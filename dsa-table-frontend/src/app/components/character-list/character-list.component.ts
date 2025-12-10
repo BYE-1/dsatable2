@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { TranslateModule } from '@ngx-translate/core';
 import { CharacterService } from '../../services/character.service';
 import { AuthService } from '../../services/auth.service';
 import { Character } from '../../models/character.model';
@@ -9,7 +10,7 @@ import { CharacterCardComponent } from '../character-card/character-card.compone
 @Component({
   selector: 'app-character-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, CharacterCardComponent],
+  imports: [CommonModule, FormsModule, TranslateModule, CharacterCardComponent],
   templateUrl: './character-list.component.html',
   styleUrl: './character-list.component.scss'
 })

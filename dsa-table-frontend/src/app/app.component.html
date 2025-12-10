@@ -3,17 +3,21 @@
     <div class="header-content">
       <h1>DSA Table</h1>
       <nav>
-        <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">Home</a>
-        <a routerLink="/sessions" routerLinkActive="active">Game Sessions</a>
-        <a routerLink="/characters" routerLinkActive="active">Characters</a>
+        <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">{{ 'navigation.home' | translate }}</a>
+        <a routerLink="/sessions" routerLinkActive="active">{{ 'navigation.gameSessions' | translate }}</a>
+        <a routerLink="/characters" routerLinkActive="active">{{ 'navigation.characters' | translate }}</a>
+        <a routerLink="/map-editor" routerLinkActive="active">{{ 'navigation.mapEditor' | translate }}</a>
       </nav>
     </div>
-    <div class="user-section" *ngIf="currentUser">
-      <span class="user-name">{{ currentUser.displayName }}</span>
-      <button class="logout-btn" (click)="logout()">Logout</button>
-    </div>
-    <div class="user-section" *ngIf="!currentUser">
-      <a routerLink="/login" class="login-link">Login</a>
+    <div class="header-right">
+      <app-language-switcher></app-language-switcher>
+      <div class="user-section" *ngIf="currentUser">
+        <span class="user-name">{{ currentUser.displayName }}</span>
+        <button class="logout-btn" (click)="logout()">{{ 'auth.logout' | translate }}</button>
+      </div>
+      <div class="user-section" *ngIf="!currentUser">
+        <a routerLink="/login" class="login-link">{{ 'auth.login' | translate }}</a>
+      </div>
     </div>
   </header>
   <main>

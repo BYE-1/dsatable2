@@ -53,7 +53,11 @@ public class SecurityConfig {
                         // Allow public access to auth endpoints
                         .requestMatchers("/api/auth/**").permitAll()
                         // Allow character image generation (public endpoint)
-                        .requestMatchers("/api/char/**").permitAll()
+                        .requestMatchers("/api/char", "/api/char/**").permitAll()
+                        // Allow environment object image generation (public endpoint)
+                        .requestMatchers("/api/env-object", "/api/env-object/**").permitAll()
+                        // Allow battlemap image generation (public endpoint)
+                        .requestMatchers("/api/battlemap-image", "/api/battlemap-image/**").permitAll()
                         // Allow Swagger UI and API docs
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
                         // Allow H2 console (for development)

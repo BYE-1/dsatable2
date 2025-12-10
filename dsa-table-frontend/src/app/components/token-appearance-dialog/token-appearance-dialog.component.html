@@ -16,8 +16,8 @@
           [(ngModel)]="tokenName" 
           class="token-name-input" 
           placeholder="Enter token name"
-          [disabled]="token?.characterId !== undefined">
-        <small *ngIf="token?.characterId !== undefined && !isPlayerMode" class="token-name-hint">Player token name is set from character</small>
+          [disabled]="token.characterId !== undefined">
+        <small *ngIf="token.characterId !== undefined && !isPlayerMode" class="token-name-hint">Player token name is set from character</small>
       </div>
       
       <!-- Mode Selection -->
@@ -69,7 +69,7 @@
       <!-- Avatar Mode -->
       <div *ngIf="tokenAppearanceMode === 'avatar' && !isPlayerMode" class="token-appearance-avatar-section">
         <app-avatar-editor
-          [initialAvatarUrl]="token?.avatarUrl"
+          [initialAvatarUrl]="token.avatarUrl"
           [showBorderColor]="true"
           [borderColor]="tokenBorderColor"
           [compact]="true"

@@ -1,21 +1,21 @@
 <div class="home-container">
-  <h1>Welcome to DSA Table</h1>
+  <h1>{{ 'home.welcome' | translate }}</h1>
   
   <div class="dashboard-grid">
     <!-- Characters Box -->
     <div class="dashboard-box">
       <div class="box-header">
-        <h2>Characters</h2>
-        <button class="btn btn-link" (click)="navigateToCharacters()">View All →</button>
+        <h2>{{ 'home.characters' | translate }}</h2>
+        <button class="btn btn-link" (click)="navigateToCharacters()">{{ 'common.viewAll' | translate }} →</button>
       </div>
       
-      <div *ngIf="charactersLoading" class="loading">Loading characters...</div>
+      <div *ngIf="charactersLoading" class="loading">{{ 'home.loadingCharacters' | translate }}</div>
       <div *ngIf="charactersError" class="error-message">{{ charactersError }}</div>
       
       <div *ngIf="!charactersLoading && !charactersError" class="box-content">
         <div *ngIf="characters.length === 0" class="empty-state">
-          <p>No characters found.</p>
-          <button class="btn btn-primary" (click)="navigateToCharacters()">Create Character</button>
+          <p>{{ 'home.noCharacters' | translate }}</p>
+          <button class="btn btn-primary" (click)="navigateToCharacters()">{{ 'character.createCharacter' | translate }}</button>
         </div>
         
         <div *ngIf="characters.length > 0" class="characters-list">
@@ -33,17 +33,17 @@
     <!-- Game Sessions Box -->
     <div class="dashboard-box">
       <div class="box-header">
-        <h2>Game Sessions</h2>
-        <button class="btn btn-link" (click)="navigateToSessions()">View All →</button>
+        <h2>{{ 'home.gameSessions' | translate }}</h2>
+        <button class="btn btn-link" (click)="navigateToSessions()">{{ 'common.viewAll' | translate }} →</button>
       </div>
       
-      <div *ngIf="sessionsLoading" class="loading">Loading game sessions...</div>
+      <div *ngIf="sessionsLoading" class="loading">{{ 'home.loadingSessions' | translate }}</div>
       <div *ngIf="sessionsError" class="error-message">{{ sessionsError }}</div>
       
       <div *ngIf="!sessionsLoading && !sessionsError" class="box-content">
         <div *ngIf="sessions.length === 0" class="empty-state">
-          <p>No game sessions found.</p>
-          <button class="btn btn-primary" (click)="navigateToSessions()">Create Session</button>
+          <p>{{ 'home.noSessions' | translate }}</p>
+          <button class="btn btn-primary" (click)="navigateToSessions()">{{ 'session.createSession' | translate }}</button>
         </div>
         
         <ul *ngIf="sessions.length > 0" class="item-list">
@@ -52,12 +52,12 @@
               <h3>{{ session.title }}</h3>
               <p *ngIf="session.description" class="item-description">{{ session.description }}</p>
               <p class="item-meta" *ngIf="session.gameMaster">
-                <strong>GM:</strong> {{ session.gameMaster.displayName }}
+                <strong>{{ 'session.gameMaster' | translate }}:</strong> {{ session.gameMaster.displayName }}
               </p>
             </div>
             <div class="item-stats" *ngIf="session.characters && session.characters.length > 0">
               <span class="stat">
-                <strong>{{ session.characters.length }}</strong> character(s)
+                <strong>{{ session.characters.length }}</strong> {{ 'home.character' | translate }}
               </span>
             </div>
           </li>

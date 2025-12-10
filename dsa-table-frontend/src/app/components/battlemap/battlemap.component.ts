@@ -1,6 +1,8 @@
-import { Component, Input, HostListener, ElementRef, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, Input, HostListener, ElementRef, ViewChild, AfterViewInit, OnDestroy, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { GameSessionService } from '../../services/game-session.service';
 import { CharacterService } from '../../services/character.service';
 import { ViewportService } from '../../services/viewport.service';
@@ -12,15 +14,16 @@ import { environment } from '../../../environments/environment';
 import { Subscription, forkJoin, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { TokenAppearanceDialogComponent, TokenAppearanceConfig } from '../token-appearance-dialog/token-appearance-dialog.component';
+import { BackgroundImageDialogComponent, BackgroundImageResult } from '../background-image-dialog/background-image-dialog.component';
 
 @Component({
   selector: 'app-battlemap',
   standalone: true,
-  imports: [CommonModule, FormsModule, TokenAppearanceDialogComponent],
+  imports: [CommonModule, FormsModule, TokenAppearanceDialogComponent, BackgroundImageDialogComponent],
   templateUrl: './battlemap.component.html',
   styleUrl: './battlemap.component.scss'
 })
-export class BattlemapComponent implements AfterViewInit, OnDestroy {
+export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
   @Input() sessionId?: number;
   @Input() mapImageUrl?: string;
   @Input() isGameMaster: boolean = false;
@@ -57,6 +60,8 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
   isFogOfWarMode: boolean = false;
   showFogMenu: boolean = false;
   
+  showTokenNames: boolean = false;
+  
   tokens: Array<{ id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string }> = [];
   private nextTokenId: number = 1;
   
@@ -74,13 +79,25 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
   dragStartTokenX: number = 0;
   dragStartTokenY: number = 0;
   
+  showBackgroundImageDialog: boolean = false;
+  
+  mapSvgContent: SafeHtml | null = null;
+  
   constructor(
     private gameSessionService: GameSessionService,
     private characterService: CharacterService,
     private viewportService: ViewportService,
     private gridService: GridService,
-    private fogOfWarService: FogOfWarService
+    private fogOfWarService: FogOfWarService,
+    private http: HttpClient,
+    private sanitizer: DomSanitizer
   ) {}
+  
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['mapImageUrl'] && !changes['mapImageUrl'].firstChange) {
+      this.loadMapSvg();
+    }
+  }
   
   ngAfterViewInit(): void {
     setTimeout(() => {
@@ -97,6 +114,11 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
       this.loadBattlemap();
       this.loadPlayerCharacter();
       this.startPolling();
+      
+      // Load SVG if mapImageUrl is already set
+      if (this.mapImageUrl) {
+        this.loadMapSvg();
+      }
     }, 0);
   }
   
@@ -183,6 +205,7 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
     
     if (battlemap.mapImageUrl) {
       this.mapImageUrl = battlemap.mapImageUrl;
+      this.loadMapSvg();
     }
   }
   
@@ -723,16 +746,46 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
   }
   
   onSetBackgroundImage(): void {
-    const currentUrl = this.mapImageUrl || '';
-    const newUrl = prompt('Enter background image URL (leave empty to remove):', currentUrl);
-    if (newUrl !== null) {
-      if (newUrl.trim() === '') {
-        this.mapImageUrl = undefined;
-      } else {
-        this.mapImageUrl = newUrl.trim();
-      }
-      this.saveBattlemap();
+    this.showBackgroundImageDialog = true;
+  }
+
+  onBackgroundImageConfirmed(result: BackgroundImageResult): void {
+    this.mapImageUrl = result.imageUrl;
+    this.showBackgroundImageDialog = false;
+    // Environment objects are already included in the background SVG image
+    // No need to load them separately as tokens
+    this.loadMapSvg();
+    this.saveBattlemap();
+  }
+  
+  private loadMapSvg(): void {
+    if (!this.mapImageUrl) {
+      this.mapSvgContent = null;
+      return;
     }
+    
+    // If it's not a battlemap-image URL (e.g., external image), use img tag
+    if (!this.mapImageUrl.includes('/battlemap-image')) {
+      this.mapSvgContent = null;
+      return;
+    }
+    
+    // Fetch the SVG content
+    this.http.get(this.mapImageUrl, { responseType: 'text' }).subscribe({
+      next: (svgContent) => {
+        // Bypass security since we control the backend and need SVG <image> tags to work
+        // The SVG is generated by our own backend code, so it's safe
+        this.mapSvgContent = this.sanitizer.bypassSecurityTrustHtml(svgContent);
+      },
+      error: (err) => {
+        console.error('Error loading map SVG:', err);
+        this.mapSvgContent = null;
+      }
+    });
+  }
+
+  onBackgroundImageCanceled(): void {
+    this.showBackgroundImageDialog = false;
   }
   
   onToggleFogOfWar(): void {
@@ -760,6 +813,10 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy {
     event.preventDefault();
     event.stopPropagation();
     this.showFogMenu = !this.showFogMenu;
+  }
+  
+  onToggleTokenNames(): void {
+    this.showTokenNames = !this.showTokenNames;
   }
   
   setFogMode(mode: 'add' | 'remove'): void {

@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { TranslateModule } from '@ngx-translate/core';
 import { CharacterService } from '../../services/character.service';
 import { GameSessionService } from '../../services/game-session.service';
 import { AuthService } from '../../services/auth.service';
@@ -11,7 +12,7 @@ import { CharacterCardComponent } from '../character-card/character-card.compone
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule, CharacterCardComponent],
+  imports: [CommonModule, TranslateModule, CharacterCardComponent],
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss'
 })

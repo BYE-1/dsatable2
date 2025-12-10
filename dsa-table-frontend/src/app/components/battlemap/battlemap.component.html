@@ -75,6 +75,21 @@
       </div>
     </div>
     
+    <!-- Right Side Menu (for everyone) -->
+    <div class="battlemap-right-menu">
+      <button 
+        class="tool-button" 
+        type="button" 
+        [class.active]="showTokenNames" 
+        (click)="onToggleTokenNames()"
+        [title]="showTokenNames ? 'Hide Token Names' : 'Show Token Names'">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+          <line x1="7" y1="7" x2="7.01" y2="7"></line>
+        </svg>
+      </button>
+    </div>
+    
     <!-- Viewport: handles mouse events and contains the scrollable area -->
     <div 
       class="map-viewport" 
@@ -90,7 +105,13 @@
       <div class="map-canvas" #mapCanvas [style.transform]="mapTransform" [style.width.px]="baseCanvasWidth" [style.height.px]="baseCanvasHeight">
         <!-- Layer 1: Background Image (lowest) -->
         <div class="map-layer layer-background">
+          <div 
+            *ngIf="mapSvgContent" 
+            [innerHTML]="mapSvgContent" 
+            class="map-image map-svg">
+          </div>
           <img 
+            *ngIf="!mapSvgContent"
             [src]="mapImageUrl || placeholderImageUrl" 
             alt="Battle Map Background" 
             class="map-image">
@@ -140,31 +161,39 @@
         <!-- Layer 5: Public Tokens (top) -->
         <div class="map-layer layer-tokens layer-public-tokens">
           <!-- Public tokens -->
-          <div 
-            *ngFor="let token of tokens" 
-            class="token"
-            [class.token-gm-only]="token.isGmOnly"
-            [class.token-dragging]="isDraggingToken && draggedTokenId === token.id"
-            [class.token-with-avatar]="token.avatarUrl"
-            [class.token-with-color]="token.color"
-            [style.left.px]="token.x"
-            [style.top.px]="token.y"
-            [style.width.px]="getTokenSize()"
-            [style.height.px]="getTokenSize()"
-            [style.background-color]="token.color"
-            [style.border-color]="token.borderColor || '#ffffff'"
-            (mousedown)="onTokenMouseDown($event, token.id)"
-            (contextmenu)="onTokenContextMenu($event, token.id)">
-            <img 
-              *ngIf="token.avatarUrl" 
-              [src]="getTokenAvatarUrl(token.avatarUrl)" 
-              [alt]="'Token avatar'"
-              class="token-avatar"
-              [style.width.px]="getTokenImageSize()"
-              [style.height.px]="getTokenImageSize()"
-              [style.transform]="'scale(' + (1 / getImageScaleFactor()) + ')'"
-              [style.image-rendering]="'auto'">
-          </div>
+          <ng-container *ngFor="let token of tokens">
+            <div 
+              class="token"
+              [class.token-gm-only]="token.isGmOnly"
+              [class.token-dragging]="isDraggingToken && draggedTokenId === token.id"
+              [class.token-with-avatar]="token.avatarUrl"
+              [class.token-with-color]="token.color"
+              [style.left.px]="token.x"
+              [style.top.px]="token.y"
+              [style.width.px]="getTokenSize()"
+              [style.height.px]="getTokenSize()"
+              [style.background-color]="token.color"
+              [style.border-color]="token.borderColor || '#ffffff'"
+              (mousedown)="onTokenMouseDown($event, token.id)"
+              (contextmenu)="onTokenContextMenu($event, token.id)">
+              <img 
+                *ngIf="token.avatarUrl" 
+                [src]="getTokenAvatarUrl(token.avatarUrl)" 
+                [alt]="'Token avatar'"
+                class="token-avatar"
+                [style.width.px]="getTokenImageSize()"
+                [style.height.px]="getTokenImageSize()"
+                [style.transform]="'scale(' + (1 / getImageScaleFactor()) + ')'"
+                [style.image-rendering]="'auto'">
+            </div>
+            <div 
+              *ngIf="showTokenNames && token.name" 
+              class="token-name-label"
+              [style.left.px]="token.x"
+              [style.top.px]="token.y - getTokenSize() / 2 - 4">
+              {{ token.name }}
+            </div>
+          </ng-container>
         </div>
       </div>
     </div>
@@ -179,4 +208,12 @@
     (canceled)="closeTokenAppearanceDialog()"
     (deleted)="onTokenDeleted()">
   </app-token-appearance-dialog>
+  
+  <!-- Background Image Dialog -->
+  <app-background-image-dialog
+    *ngIf="showBackgroundImageDialog"
+    [currentImageUrl]="mapImageUrl"
+    (confirm)="onBackgroundImageConfirmed($event)"
+    (cancel)="onBackgroundImageCanceled()">
+  </app-background-image-dialog>
 </div>

@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { TranslateModule } from '@ngx-translate/core';
 import { GameSessionService } from '../../services/game-session.service';
 import { AuthService } from '../../services/auth.service';
 import { GameSession } from '../../models/game-session.model';
@@ -9,7 +10,7 @@ import { GameSession } from '../../models/game-session.model';
 @Component({
   selector: 'app-game-session-form',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, TranslateModule],
   templateUrl: './game-session-form.component.html',
   styleUrl: './game-session-form.component.scss'
 })
