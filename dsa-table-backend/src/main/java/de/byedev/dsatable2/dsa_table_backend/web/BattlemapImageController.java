@@ -7,11 +7,11 @@ import de.byedev.dsatable2.dsa_table_backend.web.dto.BattlemapTokenDto;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.net.URLEncoder;
@@ -28,12 +28,14 @@ public class BattlemapImageController {
     private static final Logger logger = LoggerFactory.getLogger(BattlemapImageController.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Value("${app.api.base-url:http://localhost:8080/api}")
+    private String apiBaseUrl;
+
     public static final String PARAM_DATA = "data";
 
     @GetMapping(produces = "image/svg+xml")
     public ResponseEntity<String> generateBattlemapImage(
-            @RequestParam(value = PARAM_DATA, required = true) String data,
-            HttpServletRequest httpRequest) {
+            @RequestParam(value = PARAM_DATA, required = true) String data) {
 
         logger.info("Received battlemap image request, data length: {}", data != null ? data.length() : 0);
 
@@ -100,9 +102,8 @@ public class BattlemapImageController {
                     imageRequest.getTokens() != null ? imageRequest.getTokens().size() : 0,
                     imageRequest.getCellBackgrounds() != null ? imageRequest.getCellBackgrounds().size() : 0);
 
-            // Generate SVG with base URL from HTTP request
-            String baseUrl = getBaseUrl(httpRequest);
-            String svgContent = generateSVG(imageRequest, baseUrl);
+            // Generate SVG with base URL from configuration
+            String svgContent = generateSVG(imageRequest, apiBaseUrl);
             logger.debug("Generated SVG, length: {}", svgContent.length());
 
             return ResponseEntity.ok()
@@ -126,20 +127,6 @@ public class BattlemapImageController {
         }
     }
 
-    private String getBaseUrl(HttpServletRequest request) {
-        String scheme = request.getScheme();
-        String serverName = request.getServerName();
-        int serverPort = request.getServerPort();
-        String contextPath = request.getContextPath();
-        
-        StringBuilder url = new StringBuilder();
-        url.append(scheme).append("://").append(serverName);
-        if ((scheme.equals("http") && serverPort != 80) || (scheme.equals("https") && serverPort != 443)) {
-            url.append(":").append(serverPort);
-        }
-        url.append(contextPath);
-        return url.toString();
-    }
 
     private String generateSVG(BattlemapImageRequest request, String baseUrl) {
         // Get pixel dimensions from grid or fallback to canvas dimensions
