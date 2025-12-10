@@ -2,6 +2,7 @@ package de.byedev.dsatable2.dsa_table_backend.util;
 
 import java.awt.*;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
@@ -140,7 +141,8 @@ public class SVGUtil {
 
     public static String getSvgFromFile(String filename) {
         try {
-            return new String(Files.readAllBytes(new ClassPathResource("static/svg/" + filename.toLowerCase() + ".svg").getFile().toPath())).replaceAll("(<\\/?svg.*?>)", "");
+            byte[] bytes = new ClassPathResource("static/svg/" + filename.toLowerCase() + ".svg").getInputStream().readAllBytes();
+            return new String(bytes, StandardCharsets.UTF_8).replaceAll("(<\\/?svg.*?>)", "");
         } catch (IOException e) {
             throw new RuntimeException("Failed to read SVG file: " + filename, e);
         }

@@ -50,23 +50,14 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Configure authorization
                 .authorizeHttpRequests(auth -> auth
-                        // Allow public access to auth endpoints
                         .requestMatchers("/api/auth/**").permitAll()
-                        // Allow character image generation (public endpoint)
                         .requestMatchers("/api/char", "/api/char/**").permitAll()
-                        // Allow environment object image generation (public endpoint)
                         .requestMatchers("/api/env-object", "/api/env-object/**").permitAll()
-                        // Allow battlemap image generation (public endpoint)
                         .requestMatchers("/api/battlemap-image", "/api/battlemap-image/**").permitAll()
-                        // Allow Swagger UI and API docs
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
-                        // Allow H2 console (for development)
                         .requestMatchers("/h2-console/**").permitAll()
-                        // Allow static resources
                         .requestMatchers("/static/**", "/favicon.ico").permitAll()
-                        // Require authentication for all other API endpoints
                         .requestMatchers("/api/**").authenticated()
-                        // Allow everything else (for now)
                         .anyRequest().permitAll()
                 )
                 // Add JWT filter before UsernamePasswordAuthenticationFilter
