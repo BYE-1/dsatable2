@@ -810,6 +810,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    
+    .spell-label {
+      color: #7b2cbf;
+      font-weight: 700;
+    }
   }
 
   .talent-details {

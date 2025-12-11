@@ -129,7 +129,7 @@
           max="1000">
         <button class="dice-btn" (click)="rollCustomDice()">Roll</button>
       </div>
-      <div *ngIf="myCharacter && myCharacter.talents && myCharacter.talents.length > 0" class="talent-roll-panel">
+      <div *ngIf="myCharacter && ((myCharacter.talents && myCharacter.talents.length > 0) || (myCharacter.spells && myCharacter.spells.length > 0))" class="talent-roll-panel">
         <div class="talent-select-wrapper" #talentWrapper>
           <input
             type="text"
@@ -141,21 +141,23 @@
             [placeholder]="getSelectedTalentName()"
             class="talent-search-input"
             #talentInput
-            [disabled]="!myCharacter.talents || myCharacter.talents.length === 0"
-            title="Search and select a talent">
+            [disabled]="(!myCharacter.talents || myCharacter.talents.length === 0) && (!myCharacter.spells || myCharacter.spells.length === 0)"
+            title="Search and select a talent or spell">
           <div *ngIf="showTalentDropdown && getFilteredTalents().length > 0" 
                class="talent-dropdown"
                [style.left.px]="dropdownPosition.left"
                [style.bottom.px]="dropdownPosition.bottom"
                [style.width.px]="dropdownPosition.width">
             <div
-              *ngFor="let talent of getFilteredTalents(); let i = index"
-              (mousedown)="selectTalent(talent.id!)"
+              *ngFor="let item of getFilteredTalents(); let i = index"
+              (mousedown)="selectTalent(item.id, item.isSpell)"
               (mouseenter)="highlightedTalentIndex = i"
               class="talent-option"
               [class.highlighted]="isTalentHighlighted(i)">
-              <span class="talent-name">{{ talent.name }}</span>
-              <span class="talent-details">({{ talent.check }}) - {{ talent.value }}</span>
+              <span class="talent-name">
+                <span *ngIf="item.isSpell" class="spell-label">✨ </span>{{ item.name }}
+              </span>
+              <span class="talent-details">({{ item.check }}) - {{ item.value }}</span>
             </div>
           </div>
           <div *ngIf="showTalentDropdown && getFilteredTalents().length === 0 && talentSearchTerm.trim()" 
@@ -163,14 +165,14 @@
                [style.left.px]="dropdownPosition.left"
                [style.bottom.px]="dropdownPosition.bottom"
                [style.width.px]="dropdownPosition.width">
-            <div class="talent-option no-results">No talents found</div>
+            <div class="talent-option no-results">No talents or spells found</div>
           </div>
         </div>
         <button 
           class="dice-btn" 
           (click)="rollTalentCheck()"
           [disabled]="!selectedTalentId">
-          Roll Talent Check
+          Roll Check
         </button>
       </div>
       

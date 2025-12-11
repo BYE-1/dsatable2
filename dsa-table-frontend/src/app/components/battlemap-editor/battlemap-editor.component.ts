@@ -9,10 +9,18 @@ import { EnvironmentObjectType } from '../../models/environment-object-type.mode
 import { BattlemapToken } from '../../models/battlemap.model';
 import { gzipSync, strToU8 } from 'fflate';
 
+export interface BackgroundTextureInfo {
+  id: number;
+  name: string;
+  displayName: string;
+  color: string;
+}
+
 export interface BattlemapEditorData {
   gridWidth: number;
   gridHeight: number;
   cellBackgrounds?: number[]; // Array of background type IDs (0=default/green, 1=grass, 2=earth, 3=rock, 4=sand, etc.)
+  cellWater?: boolean[]; // Array of booleans indicating which cells have water (row-major order)
   tokens: BattlemapToken[];
   environmentObjects: EnvironmentObject[];
 }
@@ -35,6 +43,7 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
   @Output() previewGenerated = new EventEmitter<string>();
 
   cellBackgrounds: number[] = []; // Array of background type IDs per cell (row-major order)
+  cellWater: boolean[] = []; // Array of booleans indicating which cells have water (row-major order)
   environmentObjects: EnvironmentObject[] = [];
   tokens: BattlemapToken[] = [];
 
@@ -48,9 +57,18 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
     SAND: 4
   };
   
+  // Available background textures from backend
+  availableBackgrounds: BackgroundTextureInfo[] = [];
+  backgroundMap: Map<number, BackgroundTextureInfo> = new Map();
+  
   // Expose BACKGROUND_TYPES to template
   get BackgroundTypes() {
     return this.BACKGROUND_TYPES;
+  }
+  
+  // Get all available background IDs (including dynamic ones)
+  get availableBackgroundIds(): number[] {
+    return this.availableBackgrounds.map(bg => bg.id).sort((a, b) => a - b);
   }
 
   nextObjectId: number = 1;
@@ -85,6 +103,14 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
   private isPainting: boolean = false;
   showBrushMenu: boolean = false;
   brushMenuPosition: { x: number; y: number } = { x: 0, y: 0 };
+  private fillToolMenuOpen: boolean = false; // Track if menu was opened from fill tool
+
+  // Water tool
+  isWaterToolActive: boolean = false;
+  waterToolMode: 'add' | 'remove' = 'add'; // 'add' for left-click, 'remove' for right-click
+  private isWaterPainting: boolean = false;
+  showWaterModeMenu: boolean = false;
+  waterModeMenuPosition: { x: number; y: number } = { x: 0, y: 0 };
 
   // Drag and drop
   private draggedObjectType: { type: string; color: string; size: number } | null = null;
@@ -114,6 +140,16 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
         this.cellBackgrounds = new Array(this.gridWidth * this.gridHeight).fill(this.BACKGROUND_TYPES.DEFAULT);
       }
       
+      // Handle cell water - initialize if not present
+      const expectedWaterSize = this.gridWidth * this.gridHeight;
+      if (this.initialData.cellWater && this.initialData.cellWater.length === expectedWaterSize) {
+        // Use water data from initial data if it matches grid size
+        this.cellWater = [...this.initialData.cellWater];
+      } else {
+        // Initialize all cells to no water (false)
+        this.cellWater = new Array(expectedWaterSize).fill(false);
+      }
+      
       this.environmentObjects = this.initialData.environmentObjects || [];
       this.tokens = this.initialData.tokens || [];
       
@@ -124,11 +160,44 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
     } else {
       // Initialize with default backgrounds
       this.cellBackgrounds = new Array(this.gridWidth * this.gridHeight).fill(this.BACKGROUND_TYPES.DEFAULT);
+      // Initialize with no water
+      this.cellWater = new Array(this.gridWidth * this.gridHeight).fill(false);
     }
     this.loadObjectTypes();
+    this.loadBackgroundTextures();
     this.updatePreview();
   }
   
+  loadBackgroundTextures(): void {
+    this.http.get<BackgroundTextureInfo[]>(`${environment.apiUrl}/battlemap-image/backgrounds`).subscribe({
+      next: (backgrounds) => {
+        this.availableBackgrounds = backgrounds;
+        // Create a map for quick lookup
+        this.backgroundMap.clear();
+        backgrounds.forEach(bg => {
+          this.backgroundMap.set(bg.id, bg);
+        });
+        // Ensure default is selected if available
+        if (this.availableBackgrounds.length > 0 && !this.backgroundMap.has(this.selectedBackgroundType)) {
+          this.selectedBackgroundType = this.availableBackgrounds[0].id;
+        }
+      },
+      error: (err) => {
+        console.error('Error loading background textures:', err);
+        // Fallback to hardcoded backgrounds if API fails
+        this.availableBackgrounds = [
+          { id: 0, name: 'default', displayName: 'Default', color: '#228B22' },
+          { id: 1, name: 'grass', displayName: 'Grass', color: '#90EE90' },
+          { id: 2, name: 'earth', displayName: 'Earth', color: '#8B4513' },
+          { id: 3, name: 'stone', displayName: 'Rock', color: '#696969' },
+          { id: 4, name: 'sand', displayName: 'Sand', color: '#F4A460' }
+        ];
+        this.availableBackgrounds.forEach(bg => {
+          this.backgroundMap.set(bg.id, bg);
+        });
+      }
+    });
+  }
 
   loadObjectTypes(): void {
     this.http.get<EnvironmentObjectType[]>(`${environment.apiUrl}/env-object/types`).subscribe({
@@ -170,9 +239,18 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
     if (newSize > oldSize) {
       // Grid grew - fill new cells with default
       this.cellBackgrounds = [...this.cellBackgrounds, ...new Array(newSize - oldSize).fill(this.BACKGROUND_TYPES.DEFAULT)];
+      // Also resize cellWater array
+      if (this.cellWater.length > 0) {
+        this.cellWater = [...this.cellWater, ...new Array(newSize - oldSize).fill(false)];
+      } else {
+        this.cellWater = new Array(newSize).fill(false);
+      }
     } else if (newSize < oldSize) {
       // Grid shrunk - trim array
       this.cellBackgrounds = this.cellBackgrounds.slice(0, newSize);
+      if (this.cellWater.length > 0) {
+        this.cellWater = this.cellWater.slice(0, newSize);
+      }
     }
     
     this.updatePreview();
@@ -228,8 +306,9 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   selectObject(id: number): void {
-    // Deactivate brush when selecting an object
+    // Deactivate brush and water tool when selecting an object
     this.isBrushActive = false;
+    this.isWaterToolActive = false;
     this.selectedObjectId = this.selectedObjectId === id ? null : id;
     // Update preview to show/hide highlight
     if (this.previewSvgContent) {
@@ -399,6 +478,7 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
     console.log('Selecting background type:', bgType, 'Current brush active:', this.isBrushActive);
     this.selectedBackgroundType = bgType;
     this.isBrushActive = true;
+    this.isWaterToolActive = false; // Deactivate water tool when activating brush
     // Deselect object when activating brush
     if (this.selectedObjectId !== null) {
       this.selectedObjectId = null;
@@ -406,25 +486,69 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
     console.log('Brush activated. isBrushActive:', this.isBrushActive);
   }
 
+  // Water tool methods
+  toggleWaterTool(): void {
+    this.isWaterToolActive = !this.isWaterToolActive;
+    if (this.isWaterToolActive) {
+      this.isBrushActive = false; // Deactivate brush when activating water tool
+      // Deselect object when activating water tool
+      if (this.selectedObjectId !== null) {
+        this.selectedObjectId = null;
+      }
+    } else {
+      this.showWaterModeMenu = false; // Hide menu when deactivating tool
+    }
+  }
+
+  showWaterModeContextMenu(event: MouseEvent): void {
+    if (!this.isWaterToolActive) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Show context menu at mouse position
+    this.waterModeMenuPosition = {
+      x: event.clientX,
+      y: event.clientY
+    };
+    this.showWaterModeMenu = true;
+  }
+
+  toggleWaterMode(): void {
+    this.waterToolMode = this.waterToolMode === 'add' ? 'remove' : 'add';
+    this.showWaterModeMenu = false; // Close menu after selection
+  }
+
   getBackgroundTypeName(bgType: number): string {
+    const bgInfo = this.backgroundMap.get(bgType);
+    if (bgInfo) {
+      return bgInfo.displayName;
+    }
+    // Fallback to hardcoded names for backward compatibility
     switch (bgType) {
       case this.BACKGROUND_TYPES.DEFAULT: return 'Default';
       case this.BACKGROUND_TYPES.GRASS: return 'Grass';
       case this.BACKGROUND_TYPES.EARTH: return 'Earth';
       case this.BACKGROUND_TYPES.ROCK: return 'Rock';
       case this.BACKGROUND_TYPES.SAND: return 'Sand';
-      default: return 'Unknown';
+      default: return `Background ${bgType}`;
     }
   }
 
   getBackgroundTypeColor(bgType: number): string {
+    const bgInfo = this.backgroundMap.get(bgType);
+    if (bgInfo) {
+      return bgInfo.color;
+    }
+    // Fallback to hardcoded colors for backward compatibility
     switch (bgType) {
       case this.BACKGROUND_TYPES.DEFAULT: return '#228B22'; // Green
       case this.BACKGROUND_TYPES.GRASS: return '#90EE90'; // Light green
       case this.BACKGROUND_TYPES.EARTH: return '#8B4513'; // Brown
       case this.BACKGROUND_TYPES.ROCK: return '#696969'; // Dim gray
       case this.BACKGROUND_TYPES.SAND: return '#F4A460'; // Sandy brown
-      default: return '#228B22';
+      default: return '#808080'; // Gray fallback
     }
   }
 
@@ -513,9 +637,48 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
     }
   }
 
+  // Paint water on a cell (add or remove based on mode)
+  private paintWaterCell(col: number, row: number, addWater: boolean): void {
+    const index = row * this.gridWidth + col;
+    if (index >= 0 && index < this.cellWater.length) {
+      if (this.cellWater[index] !== addWater) {
+        // Update cell water - create new array for change detection
+        const newWater = [...this.cellWater];
+        newWater[index] = addWater;
+        this.cellWater = newWater;
+        // Don't update preview during painting - will update when painting stops
+        this.emitDataChanged();
+      }
+    }
+  }
+
   onPreviewMouseDown(event: MouseEvent): void {
     // Don't handle brush painting if a drag is in progress
     if (this.draggedObjectType !== null || this.dropInProgress) {
+      return;
+    }
+
+    // Handle water tool (uses configurable mode)
+    if (this.isWaterToolActive) {
+      // Don't handle clicks on child elements (like the hint or grid controls)
+      if ((event.target as HTMLElement).closest('.selection-hint, .grid-control')) {
+        return;
+      }
+
+      // Only handle left mouse button for water tool
+      if (event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      this.isWaterPainting = true;
+      
+      const addWater = this.waterToolMode === 'add';
+      const cell = this.getCellFromMouseEvent(event);
+      if (cell) {
+        this.paintWaterCell(cell.col, cell.row, addWater);
+      }
       return;
     }
 
@@ -548,6 +711,22 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
       return;
     }
 
+    // Handle water tool painting
+    if (this.isWaterPainting && this.isWaterToolActive) {
+      // Only handle left mouse button
+      if (event.buttons !== 1) {
+        return;
+      }
+      
+      event.preventDefault();
+      const addWater = this.waterToolMode === 'add';
+      const cell = this.getCellFromMouseEvent(event);
+      if (cell) {
+        this.paintWaterCell(cell.col, cell.row, addWater);
+      }
+      return;
+    }
+
     if (!this.isPainting || !this.isBrushActive) {
       return;
     }
@@ -560,6 +739,17 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   onPreviewMouseUp(event: MouseEvent): void {
+    // Handle water tool
+    if (this.isWaterPainting && (event.button === 0 || event.button === 2)) {
+      this.isWaterPainting = false;
+      // Force immediate preview update when painting stops
+      if (this.isWaterToolActive) {
+        setTimeout(() => {
+          this.updatePreview();
+        }, 0);
+      }
+    }
+    
     if (event.button === 0 && this.isPainting) {
       this.isPainting = false;
       // Force immediate preview update when painting stops
@@ -573,6 +763,16 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   onPreviewMouseLeave(event: MouseEvent): void {
+    // Handle water tool
+    if (this.isWaterPainting) {
+      this.isWaterPainting = false;
+      if (this.isWaterToolActive) {
+        setTimeout(() => {
+          this.updatePreview();
+        }, 0);
+      }
+    }
+    
     if (this.isPainting) {
       this.isPainting = false;
       // Force immediate preview update when mouse leaves
@@ -592,8 +792,8 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
     objectColor?: string,
     objectSize?: number
   ): void {
-    // Don't handle object placement if brush is active
-    if (this.isBrushActive) {
+    // Don't handle object placement if brush or water tool is active
+    if (this.isBrushActive || this.isWaterToolActive) {
       return;
     }
 
@@ -780,6 +980,13 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
       const packed = this.packBackgrounds(this.cellBackgrounds, this.gridWidth, this.gridHeight);
       data.bgp = this.uint8ToBase64(packed); // "bgp" = packed backgrounds
     }
+    
+    // Include cell water (packed as bits) only if there's any water
+    const hasWater = this.cellWater.some(w => w);
+    if (hasWater && this.cellWater.length > 0) {
+      const packedWater = this.packWater(this.cellWater, this.gridWidth, this.gridHeight);
+      data.wp = this.uint8ToBase64(packedWater); // "wp" = packed water
+    }
 
     try {
       // Use compact JSON (no spacing) and remove undefined/null values
@@ -911,6 +1118,24 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
     return new Uint8Array(output);
   }
 
+  private packWater(water: boolean[], gridW: number, gridH: number): Uint8Array {
+    // Pack water as bits: 8 cells per byte
+    const totalCells = gridW * gridH;
+    const output: number[] = [];
+    
+    for (let i = 0; i < totalCells; i += 8) {
+      let byte = 0;
+      for (let bit = 0; bit < 8 && i + bit < totalCells; bit++) {
+        if (water[i + bit]) {
+          byte |= (1 << bit);
+        }
+      }
+      output.push(byte);
+    }
+    
+    return new Uint8Array(output);
+  }
+
   addHighlightToSvg(svgContent: string, objectId: number): string {
     // Find the selected object
     const selectedObject = this.environmentObjects.find(obj => obj.id === objectId);
@@ -1004,12 +1229,47 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
       x: event.clientX,
       y: event.clientY
     };
+    this.fillToolMenuOpen = false;
+    this.showBrushMenu = true;
+  }
+  
+  showFillToolMenu(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    this.brushMenuPosition = {
+      x: event.clientX,
+      y: event.clientY
+    };
+    this.fillToolMenuOpen = true;
     this.showBrushMenu = true;
   }
 
   selectBackgroundTypeFromMenu(bgType: number): void {
     this.selectBackgroundType(bgType);
     this.showBrushMenu = false;
+    
+    // If menu was opened from fill tool, fill the map after selection
+    if (this.fillToolMenuOpen) {
+      this.fillAllBackgrounds();
+      this.fillToolMenuOpen = false;
+    }
+  }
+  
+  /**
+   * Fill all cells with the selected background type
+   */
+  fillAllBackgrounds(): void {
+    if (!this.cellBackgrounds || this.cellBackgrounds.length === 0) {
+      return;
+    }
+    
+    // Fill all cells with the selected background type
+    this.cellBackgrounds = this.cellBackgrounds.map(() => this.selectedBackgroundType);
+    
+    // Emit data change and update preview
+    this.emitDataChanged();
+    this.updatePreview();
   }
 
   onShowGridChange(): void {
@@ -1046,10 +1306,22 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   emitDataChanged(): void {
+    // Ensure cellWater array is properly sized
+    const expectedSize = this.gridWidth * this.gridHeight;
+    if (this.cellWater.length !== expectedSize) {
+      // Resize to match grid
+      if (this.cellWater.length < expectedSize) {
+        this.cellWater = [...this.cellWater, ...new Array(expectedSize - this.cellWater.length).fill(false)];
+      } else {
+        this.cellWater = this.cellWater.slice(0, expectedSize);
+      }
+    }
+    
     const data: BattlemapEditorData = {
       gridWidth: this.gridWidth,
       gridHeight: this.gridHeight,
       cellBackgrounds: this.cellBackgrounds.length > 0 ? [...this.cellBackgrounds] : undefined,
+      cellWater: this.cellWater.length > 0 && this.cellWater.some(w => w) ? [...this.cellWater] : undefined,
       tokens: this.tokens,
       environmentObjects: this.environmentObjects
     };
@@ -1061,6 +1333,7 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
       gridWidth: this.gridWidth,
       gridHeight: this.gridHeight,
       cellBackgrounds: this.cellBackgrounds.length > 0 ? [...this.cellBackgrounds] : undefined,
+      cellWater: this.cellWater.length > 0 && this.cellWater.some(w => w) ? [...this.cellWater] : undefined,
       tokens: this.tokens,
       environmentObjects: this.environmentObjects
     };

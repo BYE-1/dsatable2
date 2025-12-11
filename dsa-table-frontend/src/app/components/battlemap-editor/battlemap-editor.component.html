@@ -152,6 +152,74 @@
             >
               <div class="brush-icon" [style.background-color]="getBackgroundTypeColor(selectedBackgroundType)"></div>
             </button>
+            
+            <!-- Fill Tool Button -->
+            <button
+              type="button"
+              class="preview-control-btn fill-tool-btn"
+              (click)="showFillToolMenu($event)"
+              [title]="'Fill all with background type (Click to select type)'"
+              aria-label="Fill tool"
+            >
+              <svg width="20" height="20" viewBox="0 0 17 17" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+                <g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+                  <g transform="translate(1.000000, 0.000000)">
+                    <path d="M7.759,1.143 C7.252,0.634 5.403,1.664 3.629,3.445 C1.857,5.227 0.828,7.082 1.336,7.591 C1.842,8.099 3.69,7.07 5.465,5.287 C7.237,3.506 8.266,1.65 7.759,1.143 L7.759,1.143 Z" fill="currentColor"></path>
+                    <path d="M15.737,7.881 L14.834,6.985 C14.507,7.895 13.859,8.674 12.905,9.235 C11.888,9.835 10.612,10.151 9.214,10.151 C8.423,10.151 7.623,10.048 6.836,9.846 C6.682,9.806 6.554,9.709 6.473,9.573 C6.392,9.437 6.369,9.276 6.41,9.123 C6.478,8.86 6.715,8.677 6.985,8.677 C7.036,8.677 7.087,8.684 7.133,8.697 C7.828,8.877 8.531,8.968 9.224,8.968 C10.399,8.968 11.463,8.707 12.301,8.215 C13.094,7.747 13.615,7.104 13.808,6.354 C13.836,6.24 13.831,6.121 13.846,6.004 L7.862,0.062 C7.862,0.062 6.173,-0.244 3.044,2.899 C-0.089,6.044 0.034,7.834 0.034,7.834 C0.034,7.834 7.194,15.023 7.911,15.741 C8.628,16.461 10.902,15.533 13.25,13.177 C15.598,10.814 16.343,8.489 15.737,7.881 L15.737,7.881 Z M1.336,7.59 C0.828,7.081 1.857,5.227 3.629,3.444 C5.402,1.663 7.252,0.633 7.759,1.142 C8.266,1.65 7.238,3.505 5.465,5.286 C3.69,7.068 1.842,8.098 1.336,7.59 L1.336,7.59 Z" fill="currentColor"></path>
+                    <path d="M14.864,6.621 C15.554,3.936 13.089,0.974 9.366,0.016 C9.099,-0.049 8.831,0.107 8.762,0.371 C8.695,0.635 8.854,0.904 9.118,0.973 C12.181,1.76 14.275,4.022 13.951,6.109 L14.757,6.908 C14.791,6.811 14.839,6.721 14.864,6.621 L14.864,6.621 Z" fill="currentColor"></path>
+                  </g>
+                </g>
+              </svg>
+            </button>
+            
+            <!-- Water Tool Button -->
+            <button
+              type="button"
+              class="preview-control-btn water-tool-btn"
+              [class.active]="isWaterToolActive"
+              (click)="toggleWaterTool()"
+              (contextmenu)="showWaterModeContextMenu($event); $event.preventDefault()"
+              [title]="'Water tool (' + (waterToolMode === 'add' ? 'Add' : 'Remove') + ' mode) - Right-click to change mode'"
+              aria-label="Water tool"
+            >
+              <svg width="20" height="20" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <filter id="waterFilter">
+                    <feTurbulence type="fractalNoise" numOctaves="3" seed="3">
+                      <animate attributeName="baseFrequency" values="0.015; 0.0075; 0.015" dur="20s" begin="0s" repeatCount="indefinite" />
+                    </feTurbulence>
+                    <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="20" xChannelSelector="R" yChannelSelector="G" />
+                  </filter>
+                </defs>
+                <rect x="0" y="0" width="512" height="512" fill="#4A90E2" filter="url(#waterFilter)" fill-opacity="0.6"/>
+              </svg>
+            </button>
+          </div>
+          
+          <!-- Water Mode Selection Menu -->
+          <div
+            *ngIf="showWaterModeMenu"
+            class="water-mode-menu"
+            [style.left.px]="waterModeMenuPosition.x"
+            [style.top.px]="waterModeMenuPosition.y"
+            (click)="$event.stopPropagation()"
+          >
+            <div
+              class="water-mode-menu-item"
+              [class.active]="waterToolMode === 'add'"
+              (click)="waterToolMode = 'add'; showWaterModeMenu = false"
+            >
+              <span class="water-mode-icon">+</span>
+              <span class="water-mode-label">Add Water</span>
+            </div>
+            <div
+              class="water-mode-menu-item"
+              [class.active]="waterToolMode === 'remove'"
+              (click)="waterToolMode = 'remove'; showWaterModeMenu = false"
+            >
+              <span class="water-mode-icon">−</span>
+              <span class="water-mode-label">Remove Water</span>
+            </div>
           </div>
           
           <!-- Brush Type Selection Menu -->
@@ -163,7 +231,7 @@
             (click)="$event.stopPropagation()"
           >
             <div
-              *ngFor="let bgType of [BackgroundTypes.DEFAULT, BackgroundTypes.GRASS, BackgroundTypes.EARTH, BackgroundTypes.ROCK, BackgroundTypes.SAND]"
+              *ngFor="let bgType of availableBackgroundIds"
               class="brush-menu-item"
               [class.active]="selectedBackgroundType === bgType"
               (click)="selectBackgroundTypeFromMenu(bgType)"
@@ -179,8 +247,10 @@
             [style.display]="previewSvgContent ? 'flex' : 'none'"
             [class.has-selection]="selectedObjectId !== null"
             [class.brush-active]="isBrushActive"
+            [class.water-tool-active]="isWaterToolActive"
             (click)="onPreviewClick($event)"
             (mousedown)="onPreviewMouseDown($event)"
+            (contextmenu)="isWaterToolActive && $event.preventDefault()"
             (mousemove)="onPreviewMouseMove($event)"
             (mouseup)="onPreviewMouseUp($event)"
             (mouseleave)="onPreviewMouseLeave($event)"

@@ -32,7 +32,6 @@ public class DsaTableBackendApplication {
 		SpringApplication.run(DsaTableBackendApplication.class, args);
 	}
 
-	@SuppressWarnings("unused")
 	@Bean
 	@Transactional
 	CommandLineRunner initData(UserRepository userRepository,

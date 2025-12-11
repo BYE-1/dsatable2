@@ -1,12 +1,14 @@
 package de.byedev.dsatable2.dsa_table_backend.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import de.byedev.dsatable2.dsa_table_backend.service.BackgroundTextureService;
 import de.byedev.dsatable2.dsa_table_backend.util.SVGUtil;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.BattlemapImageRequest;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.BattlemapTokenDto;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,8 +18,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
@@ -30,8 +32,30 @@ public class BattlemapImageController {
 
     @Value("${app.api.base-url:http://localhost:8080/api}")
     private String apiBaseUrl;
+    
+    @Autowired
+    private BackgroundTextureService textureService;
 
     public static final String PARAM_DATA = "data";
+
+    /**
+     * Get list of available background texture options
+     */
+    @GetMapping("/backgrounds")
+    public ResponseEntity<List<Map<String, Object>>> getAvailableBackgrounds() {
+        List<BackgroundTextureService.BackgroundTextureInfo> textures = textureService.getAllTextures();
+        List<Map<String, Object>> result = textures.stream()
+                .map(texture -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", texture.getId());
+                    map.put("name", texture.getName());
+                    map.put("displayName", texture.getDisplayName());
+                    map.put("color", texture.getColor());
+                    return map;
+                })
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
 
     @GetMapping(produces = "image/svg+xml")
     public ResponseEntity<String> generateBattlemapImage(
@@ -139,32 +163,98 @@ public class BattlemapImageController {
         builder.append("<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' ");
         builder.append("width='").append(width).append("' height='").append(height).append("'>");
 
+        appendDefs(builder);
+
         // Render cell-based backgrounds
         int gridW = request.getGridWidth() != null && request.getGridWidth() > 0 ? request.getGridWidth() : 16;
         int gridH = request.getGridHeight() != null && request.getGridHeight() > 0 ? request.getGridHeight() : 16;
         List<Integer> cellBackgrounds = request.getCellBackgrounds();
         
         if (cellBackgrounds != null && !cellBackgrounds.isEmpty() && cellBackgrounds.size() >= gridW * gridH) {
-            // Render each cell with its background color
+            // Group cells by texture type for efficient rendering
+            Map<Integer, StringBuilder> textureClipPaths = new HashMap<>();
+            
             for (int row = 0; row < gridH; row++) {
                 for (int col = 0; col < gridW; col++) {
                     int index = row * gridW + col;
                     if (index < cellBackgrounds.size()) {
                         int bgType = cellBackgrounds.get(index);
-                        String color = getBackgroundColor(bgType);
                         int x = col * 32;
                         int y = row * 32;
-                        builder.append("<rect x='").append(x).append("' y='").append(y)
-                                .append("' width='32' height='32' fill='").append(color).append("'/>");
+                        
+                        String textureName = textureService.getTextureName(bgType);
+                        
+                        if ("default".equals(textureName)) {
+                            // Default green background - render directly
+                            String color = getBackgroundColor(bgType);
+                            builder.append("<rect x='").append(x).append("' y='").append(y)
+                                    .append("' width='32' height='32' fill='").append(color).append("'/>");
+                        } else {
+                            // Texture-based background - add to clip path
+                            textureClipPaths.computeIfAbsent(bgType, k -> new StringBuilder())
+                                    .append("<rect x='").append(x).append("' y='").append(y)
+                                    .append("' width='32' height='32' />");
+                        }
                     }
                 }
             }
-            logger.debug("Rendered {} cell backgrounds", cellBackgrounds.size());
+            
+            // Render clip paths and textured backgrounds for each texture type
+            for (Map.Entry<Integer, StringBuilder> entry : textureClipPaths.entrySet()) {
+                int bgType = entry.getKey();
+                String textureName = textureService.getTextureName(bgType);
+                String clipPathId = textureName + "-clip";
+                String filterId = textureService.getFilterId(bgType);
+                String color = getBackgroundColor(bgType);
+                
+                // Add clip path definition
+                builder.append("<defs id='").append(textureName).append("-clip-def'><clipPath id='")
+                        .append(clipPathId).append("'>");
+                builder.append(entry.getValue().toString());
+                builder.append("</clipPath></defs>");
+                
+                // Render textured background with clip path
+                String textureSvg = textureService.getTextureSvg(bgType);
+                if (textureSvg != null && !textureSvg.isEmpty()) {
+                    // Extract filter and pattern definitions from texture SVG
+                    String textureDefs = extractDefsFromSvg(textureSvg);
+                    if (!textureDefs.isEmpty()) {
+                        builder.append("<defs>").append(textureDefs).append("</defs>");
+                    }
+                    
+                    // Extract drawing elements (rects, paths, etc.) from texture SVG
+                    String drawingElements = extractDrawingElementsFromSvg(textureSvg, clipPathId, width, height);
+                    if (!drawingElements.isEmpty()) {
+                        builder.append(drawingElements);
+                    } else {
+                        // Fallback: create a rect if no drawing elements found
+                        builder.append("<rect x='0' y='0' width='").append(width).append("' height='").append(height)
+                                .append("' fill='").append(color).append("'");
+                        if (!filterId.isEmpty()) {
+                            builder.append(" filter='").append(filterId).append("'");
+                        }
+                        builder.append(" clip-path='url(#").append(clipPathId).append(")'/>");
+                    }
+                } else {
+                    // Fallback to solid color if texture not found
+                    builder.append("<rect x='0' y='0' width='").append(width).append("' height='").append(height)
+                            .append("' fill='").append(color).append("' clip-path='url(#").append(clipPathId).append(")'/>");
+                }
+            }
+            
+            logger.debug("Rendered {} cell backgrounds with {} texture types", cellBackgrounds.size(), textureClipPaths.size());
         } else {
             // Fallback: solid default green background
             builder.append("<rect x='0' y='0' width='").append(width).append("' height='").append(height)
                     .append("' fill='#228B22'/>");
             logger.debug("No cell backgrounds provided, using default green background");
+        }
+
+        // Add water layer above backgrounds but below tokens
+        boolean[] cellWater = request.decodeWater();
+        if (cellWater != null && cellWater.length > 0) {
+            logger.debug("Rendering water layer for {} cells", cellWater.length);
+            builder.append(renderWaterLayer(cellWater, width, height, gridW, gridH));
         }
 
         // Add tokens/objects on top of background (last elements = top layer in SVG)
@@ -181,6 +271,155 @@ public class BattlemapImageController {
 
         return SVGUtil.DOCTYPE + builder.toString();
     }
+
+    private void appendDefs(StringBuilder builder) {
+        // Dynamically load all texture definitions
+        List<BackgroundTextureService.BackgroundTextureInfo> textures = textureService.getAllTextures();
+        Set<String> loadedTextures = new HashSet<>();
+        
+        for (BackgroundTextureService.BackgroundTextureInfo texture : textures) {
+            String textureName = texture.getName();
+            if (!"default".equals(textureName) && !loadedTextures.contains(textureName)) {
+                try {
+                    String svgContent = textureService.getTextureSvg(texture.getId());
+                    if (svgContent != null && !svgContent.isEmpty()) {
+                        // Extract and append defs from texture SVG
+                        String defs = extractDefsFromSvg(svgContent);
+                        if (!defs.isEmpty()) {
+                            builder.append(defs);
+                            loadedTextures.add(textureName);
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("Failed to load texture defs for: {}", textureName, e);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Extract <defs> section from SVG content
+     */
+    private String extractDefsFromSvg(String svgContent) {
+        if (svgContent == null || svgContent.isEmpty()) {
+            return "";
+        }
+        
+        // Look for <defs>...</defs> tags
+        int defsStart = svgContent.indexOf("<defs");
+        if (defsStart == -1) {
+            return "";
+        }
+        
+        int defsEnd = svgContent.indexOf("</defs>", defsStart);
+        if (defsEnd == -1) {
+            return "";
+        }
+        
+        return svgContent.substring(defsStart+6, defsEnd ); // +7 for "</defs>"
+    }
+    
+    /**
+     * Extract drawing elements (rects, paths, etc.) from SVG content, excluding defs and svg tags.
+     * Replaces clip-path references with our own clip path and scales to canvas size.
+     */
+    private String extractDrawingElementsFromSvg(String svgContent, String clipPathId, int canvasWidth, int canvasHeight) {
+        if (svgContent == null || svgContent.isEmpty()) {
+            return "";
+        }
+        
+        // Remove SVG opening/closing tags and defs section
+        String content = svgContent;
+        
+        // Remove <svg> opening tag (everything up to first > after <svg)
+        int svgStart = content.indexOf("<svg");
+        if (svgStart != -1) {
+            int svgEnd = content.indexOf(">", svgStart);
+            if (svgEnd != -1) {
+                content = content.substring(svgEnd + 1);
+            }
+        }
+        
+        // Remove </svg> closing tag
+        content = content.replaceAll("</svg>", "");
+        
+        // Remove defs section (already extracted separately)
+        content = content.replaceAll("<defs[^>]*>.*?</defs>", "");
+        
+        // Remove comments
+        content = content.replaceAll("<!--.*?-->", "");
+        
+        // Process each drawing element (rect, path, circle, etc.)
+        StringBuilder result = new StringBuilder();
+        
+        // Find all drawing elements - handle both self-closing and paired tags
+        // Match: <rect ... /> or <rect ...></rect> or <path ... /> etc.
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+            "<(rect|path|circle|ellipse|polygon|polyline|line|g|use|image|text)([^>]*?)(?:/>|>.*?</\\1>)",
+            java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE
+        );
+        
+        java.util.regex.Matcher matcher = pattern.matcher(content);
+        while (matcher.find()) {
+            String tagName = matcher.group(1);
+            String attributes = matcher.group(2);
+            boolean isSelfClosing = matcher.group(0).endsWith("/>");
+            
+            // Process attributes: remove old clip-path, update dimensions, add our clip-path
+            String processedAttrs = processAttributes(attributes, clipPathId, canvasWidth, canvasHeight);
+            
+            // Reconstruct element
+            String element = "<" + tagName + processedAttrs;
+            if (isSelfClosing) {
+                element += "/>";
+            } else {
+                // For paired tags, we need to extract the content too
+                String fullMatch = matcher.group(0);
+                int contentStart = fullMatch.indexOf(">") + 1;
+                int contentEnd = fullMatch.lastIndexOf("</" + tagName);
+                if (contentEnd > contentStart) {
+                    String elementContent = fullMatch.substring(contentStart, contentEnd);
+                    element += ">" + elementContent + "</" + tagName + ">";
+                } else {
+                    element += "/>";
+                }
+            }
+            
+            result.append(element);
+        }
+        
+        return result.toString();
+    }
+    
+    /**
+     * Process SVG element attributes: remove old clip-path, update dimensions, add our clip-path
+     */
+    private String processAttributes(String attributes, String clipPathId, int canvasWidth, int canvasHeight) {
+        if (attributes == null) {
+            attributes = "";
+        }
+        
+        // Remove existing clip-path
+        attributes = attributes.replaceAll("clip-path=['\"][^'\"]*['\"]", "");
+        attributes = attributes.replaceAll("clip-path=[^\\s>]*", "");
+        
+        // Update width/height to canvas dimensions (for rects that fill the texture)
+        attributes = attributes.replaceAll("width=['\"][^'\"]*['\"]", "width='" + canvasWidth + "'");
+        attributes = attributes.replaceAll("height=['\"][^'\"]*['\"]", "height='" + canvasHeight + "'");
+        
+        // Update x/y to 0 (start from top-left)
+        attributes = attributes.replaceAll("x=['\"][^'\"]*['\"]", "x='0'");
+        attributes = attributes.replaceAll("y=['\"][^'\"]*['\"]", "y='0'");
+        
+        // Add our clip-path
+        if (!attributes.trim().isEmpty() && !attributes.trim().endsWith(" ")) {
+            attributes += " ";
+        }
+        attributes += "clip-path='url(#" + clipPathId + ")'";
+        
+        return " " + attributes.trim() + " ";
+    }
+
 
     private String addToken(BattlemapTokenDto token, String baseUrl) {
         if (token.getX() == null || token.getY() == null) {
@@ -320,8 +559,21 @@ public class BattlemapImageController {
                 SVGUtil.SVG_CLOSE;
     }
     
-    // Background type IDs: 0=default/green, 1=grass, 2=earth, 3=rock, 4=sand
+    /**
+     * Get background color for a texture type ID
+     */
     private String getBackgroundColor(int bgType) {
+        if (textureService.isValidTextureId(bgType)) {
+            String textureName = textureService.getTextureName(bgType);
+            BackgroundTextureService.BackgroundTextureInfo info = textureService.getAllTextures().stream()
+                    .filter(t -> t.getName().equals(textureName))
+                    .findFirst()
+                    .orElse(null);
+            if (info != null) {
+                return info.getColor();
+            }
+        }
+        // Fallback to default colors for legacy types
         switch (bgType) {
             case 0: return "#228B22"; // Default green
             case 1: return "#90EE90"; // Light green (grass)
@@ -332,5 +584,67 @@ public class BattlemapImageController {
         }
     }
     
+    /**
+     * Render water layer for cells that have water
+     * Creates a single path combining all water cells for better performance
+     */
+    private String renderWaterLayer(boolean[] cellWater, int canvasWidth, int canvasHeight, int gridWidth, int gridHeight) {
+        StringBuilder builder = new StringBuilder();
+        
+        // Load water SVG and extract filter definition
+        String waterSvg = SVGUtil.getSvgFromFile("water");
+        if (waterSvg == null || waterSvg.isEmpty()) {
+            logger.warn("Water SVG not found, skipping water layer");
+            return "";
+        }
+        
+        // Extract filter definition from water SVG
+        String filterDefs = extractDefsFromSvg(waterSvg);
+        if (!filterDefs.isEmpty()) {
+            builder.append("<defs>").append(filterDefs).append("</defs>");
+        }
+        
+        // Build a single path that combines all water cells
+        final int CELL_SIZE = 32;
+        StringBuilder pathData = new StringBuilder();
+        boolean hasWater = false;
+        
+        for (int i = 0; i < cellWater.length && i < gridWidth * gridHeight; i++) {
+            if (cellWater[i]) {
+                int row = i / gridWidth;
+                int col = i % gridWidth;
+                int x = col * CELL_SIZE;
+                int y = row * CELL_SIZE;
+                int ex = x + CELL_SIZE >= canvasWidth ? 15:0;
+                int esx = x <= 0 ? -15:0;
+                int ey = y + CELL_SIZE >= canvasHeight ? 15:0;
+                int esy = y <= 0 ? -15:0;
+                
+                // Add rectangle to path: M (move to), then draw rectangle
+                // Format: M x,y L x+width,y L x+width,y+height L x,y+height Z
+                if (hasWater) {
+                    pathData.append(" ");
+                }
+                pathData.append(String.format(
+                    "M %d,%d L %d,%d L %d,%d L %d,%d Z",
+                    x + esx, y + esy,                           // Top-left
+                    x + CELL_SIZE + ex, y + esy,               // Top-right
+                    x + CELL_SIZE + ex, y + CELL_SIZE + ey,   // Bottom-right
+                    x + esx, y + CELL_SIZE + ey                 // Bottom-left
+                ));
+                hasWater = true;
+            }
+        }
+        
+        // Render single path with all water cells if any water exists
+        if (hasWater) {
+            builder.append(String.format(
+                "<path d='%s' fill='#4A90E2' filter='url(#waterFilter)' fill-opacity='0.6' fill-rule='evenodd'/>",
+                pathData.toString()
+            ));
+        }
+        
+        return builder.toString();
+    }
 }
 

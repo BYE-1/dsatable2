@@ -174,13 +174,6 @@ public class EnvironmentObjectController {
         return new Color(r, g, b);
     }
 
-    private Color darken(Color color, float factor) {
-        int r = Math.max(0, (int) (color.getRed() * (1 - factor)));
-        int g = Math.max(0, (int) (color.getGreen() * (1 - factor)));
-        int b = Math.max(0, (int) (color.getBlue() * (1 - factor)));
-        return new Color(r, g, b);
-    }
-
     private String getDefaultColor(String type) {
         switch (type) {
             case TYPE_TREE1:

@@ -1,13 +1,21 @@
 export interface BattlemapToken {
   id?: number;
-  tokenId: number;
+  tid?: number; // JSON property name from backend (@JsonProperty("tid"))
+  tokenId?: number; // Mapped from tid for internal use
   x: number;
   y: number;
-  isGmOnly: boolean;
+  gm?: boolean; // JSON property name from backend (@JsonProperty("gm"))
+  isGmOnly?: boolean; // Mapped from gm for internal use
   color?: string;
-  avatarUrl?: string;
-  borderColor?: string;
+  url?: string; // JSON property name from backend (@JsonProperty("url"))
+  avatarUrl?: string; // Mapped from url for internal use
+  bc?: string; // JSON property name from backend (@JsonProperty("bc"))
+  borderColor?: string; // Mapped from bc for internal use
   name?: string;
+  // Environment object properties
+  et?: string; // envType
+  ec?: string; // envColor
+  es?: number; // envSize
 }
 
 export interface FogRevealedArea {

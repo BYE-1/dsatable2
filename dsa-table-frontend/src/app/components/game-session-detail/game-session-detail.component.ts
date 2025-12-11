@@ -8,7 +8,7 @@ import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
 import { UserService } from '../../services/user.service';
 import { GameSession } from '../../models/game-session.model';
-import { Character } from '../../models/character.model';
+import { Character, Talent, Spell } from '../../models/character.model';
 import { ChatComponent } from '../chat/chat.component';
 import { BattlemapComponent } from '../battlemap/battlemap.component';
 import { environment } from '../../../environments/environment';
@@ -50,8 +50,9 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
   // Owner information cache
   private ownerNames: Map<number, string> = new Map();
   
-  // Talent rolling
+  // Talent/Spell rolling
   selectedTalentId: number | null = null;
+  selectedIsSpell: boolean = false; // Track if selected item is a spell (false = talent)
   talentSearchTerm: string = '';
   showTalentDropdown: boolean = false;
   highlightedTalentIndex: number = -1;
@@ -462,31 +463,68 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
     this.talentSearchTerm = '';
   }
 
-  getFilteredTalents(): any[] {
-    if (!this.myCharacter?.talents) return [];
-    if (!this.talentSearchTerm.trim()) {
-      return this.myCharacter.talents.filter(t => t.id !== undefined && t.id !== null);
+  getFilteredTalents(): Array<{ id: number; name: string; check: string; value: number; isSpell: boolean }> {
+    const results: Array<{ id: number; name: string; check: string; value: number; isSpell: boolean }> = [];
+    
+    // Add talents
+    if (this.myCharacter?.talents) {
+      const talents = this.myCharacter.talents
+        .filter(t => t.id !== undefined && t.id !== null)
+        .map(t => ({
+          id: t.id!,
+          name: t.name,
+          check: t.check,
+          value: t.value,
+          isSpell: false
+        }));
+      results.push(...talents);
     }
-    const searchLower = this.talentSearchTerm.toLowerCase();
-    return this.myCharacter.talents.filter(t => 
-      t.id !== undefined && 
-      t.id !== null &&
-      (t.name.toLowerCase().includes(searchLower) || 
-       (t.check && t.check.toLowerCase().includes(searchLower)))
-    );
+    
+    // Add spells
+    if (this.myCharacter?.spells) {
+      const spells = this.myCharacter.spells
+        .filter(s => s.id !== undefined && s.id !== null)
+        .map(s => ({
+          id: s.id!,
+          name: s.name,
+          check: s.check,
+          value: s.value,
+          isSpell: true
+        }));
+      results.push(...spells);
+    }
+    
+    // Filter by search term if provided
+    if (this.talentSearchTerm.trim()) {
+      const searchLower = this.talentSearchTerm.toLowerCase();
+      return results.filter(item => 
+        item.name.toLowerCase().includes(searchLower) || 
+        (item.check && item.check.toLowerCase().includes(searchLower))
+      );
+    }
+    
+    return results;
   }
 
-  selectTalent(talentId: number): void {
+  selectTalent(talentId: number, isSpell: boolean = false): void {
     this.selectedTalentId = talentId;
+    this.selectedIsSpell = isSpell;
     this.showTalentDropdown = false;
     this.talentSearchTerm = '';
   }
 
   getSelectedTalentName(): string {
-    if (!this.selectedTalentId || !this.myCharacter?.talents) return 'Select a talent...';
-    const talent = this.myCharacter.talents.find(t => t.id === this.selectedTalentId);
-    if (!talent) return 'Select a talent...';
-    return `${talent.name} (${talent.check}) - ${talent.value}`;
+    if (!this.selectedTalentId) return 'Select a talent or spell...';
+    
+    if (this.selectedIsSpell) {
+      const spell = this.myCharacter?.spells?.find(s => s.id === this.selectedTalentId);
+      if (!spell) return 'Select a talent or spell...';
+      return `[Spell] ${spell.name} (${spell.check}) - ${spell.value}`;
+    } else {
+      const talent = this.myCharacter?.talents?.find(t => t.id === this.selectedTalentId);
+      if (!talent) return 'Select a talent or spell...';
+      return `${talent.name} (${talent.check}) - ${talent.value}`;
+    }
   }
 
   onTalentInputFocus(): void {
@@ -539,12 +577,14 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
     if (event.key === 'Enter') {
       event.preventDefault();
       if (this.showTalentDropdown && filteredTalents.length > 0) {
-        // Dropdown is open: select highlighted talent
+        // Dropdown is open: select highlighted talent/spell
         if (this.highlightedTalentIndex >= 0 && this.highlightedTalentIndex < filteredTalents.length) {
-          this.selectTalent(filteredTalents[this.highlightedTalentIndex].id!);
+          const item = filteredTalents[this.highlightedTalentIndex];
+          this.selectTalent(item.id, item.isSpell);
         } else if (filteredTalents.length === 1) {
           // Only one result: select it
-          this.selectTalent(filteredTalents[0].id!);
+          const item = filteredTalents[0];
+          this.selectTalent(item.id, item.isSpell);
         }
       } else if (this.selectedTalentId) {
         // Talent is selected and dropdown is closed: perform roll
@@ -623,33 +663,48 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
       return;
     }
     
-    // Try multiple comparison methods to handle type mismatches
-    const talent = this.myCharacter.talents?.find(t => {
-      return t.id === talentId || 
-             Number(t.id) === talentId || 
-             t.id === Number(talentId) ||
-             String(t.id) === String(talentId);
-    });
+    // Try to find in talents or spells based on selectedIsSpell flag
+    let talentOrSpell: Talent | Spell | undefined;
     
-    if (!talent) {
-      const errorMsg = `❌ Talent not found (ID: ${this.selectedTalentId})`;
-      console.error('Talent not found');
+    if (this.selectedIsSpell) {
+      talentOrSpell = this.myCharacter.spells?.find(s => {
+        return s.id === talentId || 
+               Number(s.id) === talentId || 
+               s.id === Number(talentId) ||
+               String(s.id) === String(talentId);
+      });
+    } else {
+      talentOrSpell = this.myCharacter.talents?.find(t => {
+        return t.id === talentId || 
+               Number(t.id) === talentId || 
+               t.id === Number(talentId) ||
+               String(t.id) === String(talentId);
+      });
+    }
+    
+    if (!talentOrSpell) {
+      const typeLabel = this.selectedIsSpell ? 'Spell' : 'Talent';
+      const errorMsg = `❌ ${typeLabel} not found (ID: ${this.selectedTalentId})`;
+      console.error(`${typeLabel} not found`);
       this.chatComponent.sendMessage(errorMsg);
       this.selectedTalentId = null;
+      this.selectedIsSpell = false;
       return;
     }
 
     // Parse check string (format: "MU/IN/GE" or "(MU/IN/GE)")
-    const checkStr = talent.check || '';
+    const checkStr = talentOrSpell.check || '';
     const cleanCheck = checkStr.replace(/[()]/g, '').trim();
     const properties = cleanCheck.split('/').map(p => p.trim());
 
 
     if (properties.length !== 3) {
-      const message = `❌ Invalid talent check format: ${talent.check} (expected 3 properties, got ${properties.length})`;
+      const typeLabel = this.selectedIsSpell ? 'spell' : 'talent';
+      const message = `❌ Invalid ${typeLabel} check format: ${talentOrSpell.check} (expected 3 properties, got ${properties.length})`;
       console.error('Invalid check format:', message);
       this.chatComponent.sendMessage(message);
       this.selectedTalentId = null;
+      this.selectedIsSpell = false;
       return;
     }
 
@@ -658,6 +713,7 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
       console.error('Character properties not loaded');
       this.chatComponent.sendMessage(message);
       this.selectedTalentId = null;
+      this.selectedIsSpell = false;
       return;
     }
 
@@ -702,7 +758,7 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
     accumulatedMod += (this.myCharacter.wounds || 0) * 2;
     
     // Calculate totalMod = abilityValue - mod
-    const totalMod = talent.value - accumulatedMod;
+    const totalMod = talentOrSpell.value - accumulatedMod;
     
     // result = Math.max(totalMod, 0) - this is the INITIAL result
     let result = Math.max(totalMod, 0);
@@ -710,7 +766,7 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
     // diff = totalMod < 0 ? -totalMod : 0
     const diff = totalMod < 0 ? -totalMod : 0;
 
-    // Roll dice for each property (3 dice for talents)
+    // Roll dice for each property (3 dice for talents/spells)
     const roll1 = Math.floor(Math.random() * 20) + 1;
     const roll2 = Math.floor(Math.random() * 20) + 1;
     const roll3 = Math.floor(Math.random() * 20) + 1;
@@ -731,20 +787,21 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
     result += Math.min(r3, 0);
 
     // Cap result at ability value
-    if (result > talent.value) {
-      result = talent.value;
+    if (result > talentOrSpell.value) {
+      result = talentOrSpell.value;
     }
     
     const finalResult = result;
 
     // Format message similar to Java code
-    // Format: "HeroName 🎲 TalentName (roll1|roll2|roll3) = result"
+    // Format: "HeroName 🎲 TalentName/SpellName (roll1|roll2|roll3) = result"
     const characterName = this.myCharacter.name;
-    const talentName = talent.name;
+    const talentOrSpellName = talentOrSpell.name;
+    const typeLabel = this.selectedIsSpell ? '✨' : '';
     // Show modifier in message if non-zero
     const modStr = accumulatedMod !== 0 ? (accumulatedMod < 0 ? `${accumulatedMod}` : `+${accumulatedMod}`) : '';
     
-    const message = `${characterName} 🎲 ${talentName} (${roll1}|${roll2}|${roll3})${modStr ? modStr : ''} = ${finalResult}`;
+    const message = `${characterName} 🎲 ${typeLabel}${talentOrSpellName} (${roll1}|${roll2}|${roll3})${modStr ? modStr : ''} = ${finalResult}`;
 
     // Use the same approach as regular dice rolls - send via chat component
     if (!this.chatComponent) {
@@ -763,6 +820,7 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
     }
     
     this.selectedTalentId = null;
+    this.selectedIsSpell = false;
   }
 
   quickModifyLife(amount: number): void {

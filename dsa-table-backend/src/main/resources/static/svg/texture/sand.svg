@@ -1,0 +1,37 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+
+  <defs id="sand">
+    <filter id="sand-filter" x="0" y="0" width="100%" height="100%">
+
+      <!-- Grainy noise -->
+      <feTurbulence type="fractalNoise" baseFrequency="0.9 0.9" numOctaves="3" stitchTiles="stitch" result="noise"></feTurbulence>
+
+      <!-- Gentle vertical blur to get soft horizontal ripples -->
+      <feGaussianBlur in="noise" stdDeviation="0 8" result="ripples"></feGaussianBlur>
+
+      <!-- Combine grain + ripples -->
+      <feBlend in="noise" in2="ripples" mode="multiply" result="combined"></feBlend>
+
+      <!-- Map grayscale noise into "dark yellow → bright yellow" -->
+      <!-- R_out = 0.7*gray + 0.15   (dark yellow to mid-bright yellow)
+           G_out = 0.8*gray + 0.20   (a bit stronger green → more yellowish)
+           B_out = 0.1*gray + 0.02   (low blue so it stays yellow, not white) -->
+      <feColorMatrix in="combined" type="matrix" values="0.7 0.7 0.7 0 0.05
+                0.6 0.6 0.6 0 0.05
+                0.1 0.1 0.1 0 0.01
+                0   0   0   1 0" result="sandColor"></feColorMatrix>
+
+      <!-- Optional: compress bright highlights so nothing approaches white -->
+      <feComponentTransfer in="sandColor" result="sandFinal">
+        <feFuncR type="gamma" amplitude="1" exponent="1.2" offset="0"></feFuncR>
+        <feFuncG type="gamma" amplitude="1" exponent="1.2" offset="0"></feFuncG>
+        <feFuncB type="gamma" amplitude="1" exponent="1.2" offset="0"></feFuncB>
+      </feComponentTransfer>
+
+    </filter>
+  </defs>
+
+  <!-- Dark yellow-ish base so even the darkest parts are yellow, not gray -->
+  <rect x="0" y="0" width="512" height="512" fill="#6f5a1a" filter="url(#sand-filter)" clip-path="url(#sand-clip)"></rect>  
+</svg>

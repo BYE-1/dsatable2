@@ -204,12 +204,23 @@ export class MapEditorPageComponent implements OnInit {
         try {
           const data = this.decodeDataParam(dataParam);
           
+          // Debug: Log water data to verify it's being decoded
+          if (data.cellWater) {
+            const waterCount = data.cellWater.filter(w => w).length;
+            console.log('Loaded water data:', { 
+              totalCells: data.cellWater.length, 
+              waterCells: waterCount,
+              gridSize: `${data.gridWidth}x${data.gridHeight}` 
+            });
+          }
+          
           // Handle migration from old canvasWidth/canvasHeight format
           if (data.gridWidth && data.gridHeight) {
             this.initialData = {
               gridWidth: data.gridWidth || 16,
               gridHeight: data.gridHeight || 16,
               cellBackgrounds: data.cellBackgrounds,
+              cellWater: data.cellWater, // Include water data
               tokens: data.tokens || [],
               environmentObjects: data.environmentObjects || []
             };
@@ -219,6 +230,7 @@ export class MapEditorPageComponent implements OnInit {
               gridWidth: Math.round((data as any).canvasWidth / 32) || 16,
               gridHeight: Math.round((data as any).canvasHeight / 32) || 16,
               cellBackgrounds: data.cellBackgrounds,
+              cellWater: data.cellWater, // Include water data
               tokens: data.tokens || [],
               environmentObjects: data.environmentObjects || []
             };
@@ -428,6 +440,16 @@ export class MapEditorPageComponent implements OnInit {
         result.bgp = Array.from(packed); // Convert Uint8Array to regular array for JSON
       }
     }
+    
+    // Pack water data (as bits: 8 cells per byte) only if there's any water
+    if (data.cellWater && data.cellWater.length > 0) {
+      const hasWater = data.cellWater.some(w => w);
+      if (hasWater) {
+        const packedWater = this.packWater(data.cellWater, data.gridWidth, data.gridHeight);
+        result.wp = Array.from(packedWater); // "wp" = packed water
+      }
+    }
+    
     return result;
   }
 
@@ -459,10 +481,30 @@ export class MapEditorPageComponent implements OnInit {
       environmentObjects = raw.environmentObjects;
     }
     
+    // Handle water data: unpack from packed format (wp) or use legacy format
+    let cellWater: boolean[] | undefined = raw.cellWater;
+    if (!cellWater && raw.wp) {
+      if (Array.isArray(raw.wp)) {
+        // New array format (packed as bits)
+        cellWater = this.unpackWater(new Uint8Array(raw.wp), gridWidth, gridHeight);
+      } else if (typeof raw.wp === 'string') {
+        // Legacy base64 format
+        const bytes = this.base64ToUint8(raw.wp);
+        cellWater = this.unpackWater(bytes, gridWidth, gridHeight);
+      }
+    }
+    
+    // Ensure cellWater is always an array matching grid size (even if all false)
+    // This ensures proper initialization when loading from data param
+    if (!cellWater || cellWater.length !== gridWidth * gridHeight) {
+      cellWater = new Array(gridWidth * gridHeight).fill(false);
+    }
+    
     return {
       gridWidth,
       gridHeight,
       cellBackgrounds,
+      cellWater,
       tokens: raw.ts ?? raw.tokens ?? [],
       environmentObjects
     };
@@ -689,6 +731,39 @@ export class MapEditorPageComponent implements OnInit {
       const hex = x.toString(16);
       return hex.length === 1 ? '0' + hex : hex;
     }).join('');
+  }
+
+  private packWater(water: boolean[], gridW: number, gridH: number): Uint8Array {
+    // Pack water as bits: 8 cells per byte
+    const totalCells = gridW * gridH;
+    const output: number[] = [];
+    
+    for (let i = 0; i < totalCells; i += 8) {
+      let byte = 0;
+      for (let bit = 0; bit < 8 && i + bit < totalCells; bit++) {
+        if (water[i + bit]) {
+          byte |= (1 << bit);
+        }
+      }
+      output.push(byte);
+    }
+    
+    return new Uint8Array(output);
+  }
+
+  private unpackWater(bytes: Uint8Array, gridW: number, gridH: number): boolean[] {
+    // Unpack water from bits: 8 cells per byte
+    const totalCells = gridW * gridH;
+    const result = new Array<boolean>(totalCells).fill(false);
+    let bitIndex = 0;
+    
+    for (const byte of bytes) {
+      for (let bit = 0; bit < 8 && bitIndex < totalCells; bit++) {
+        result[bitIndex++] = ((byte >> bit) & 1) === 1;
+      }
+    }
+    
+    return result;
   }
 }
 

@@ -37,6 +37,13 @@ public class BattlemapImageRequest {
     // Environment objects binary format (eob): packed binary data
     @JsonProperty("eob")
     private Object environmentObjectsBinary;
+    
+    // Cell water: packed as bits (8 cells per byte)
+    // Can be either:
+    // 1. String (base64 encoded)
+    // 2. List<Integer> (raw bytes as array of numbers)
+    @JsonProperty("wp")
+    private Object cellWaterPacked;
 
     public BattlemapImageRequest() {
     }
@@ -122,6 +129,65 @@ public class BattlemapImageRequest {
     
     public void setEnvironmentObjectsBinary(Object environmentObjectsBinary) {
         this.environmentObjectsBinary = environmentObjectsBinary;
+    }
+    
+    public Object getCellWaterPacked() {
+        return cellWaterPacked;
+    }
+    
+    public void setCellWaterPacked(Object cellWaterPacked) {
+        this.cellWaterPacked = cellWaterPacked;
+    }
+    
+    /**
+     * Decode packed water data to boolean array
+     */
+    public boolean[] decodeWater() {
+        if (cellWaterPacked == null) {
+            return null;
+        }
+        
+        byte[] bytes;
+        
+        // Handle List<Integer> format (array of bytes as numbers)
+        if (cellWaterPacked instanceof List) {
+            @SuppressWarnings("unchecked")
+            List<Integer> byteList = (List<Integer>) cellWaterPacked;
+            bytes = new byte[byteList.size()];
+            for (int i = 0; i < byteList.size(); i++) {
+                bytes[i] = byteList.get(i).byteValue();
+            }
+        }
+        // Handle legacy format: String (base64 encoded)
+        else if (cellWaterPacked instanceof String) {
+            String packedString = (String) cellWaterPacked;
+            if (packedString.isEmpty()) {
+                return null;
+            }
+            try {
+                bytes = Base64.getDecoder().decode(packedString);
+            } catch (IllegalArgumentException ex) {
+                return null;
+            }
+        } else {
+            return null;
+        }
+        
+        int totalCells = (gridWidth != null && gridHeight != null) ? gridWidth * gridHeight : 0;
+        if (totalCells <= 0) {
+            return null;
+        }
+        
+        boolean[] result = new boolean[totalCells];
+        int bitIndex = 0;
+        
+        for (byte b : bytes) {
+            for (int bit = 0; bit < 8 && bitIndex < totalCells; bit++) {
+                result[bitIndex++] = ((b >> bit) & 1) == 1;
+            }
+        }
+        
+        return result;
     }
     
     /**

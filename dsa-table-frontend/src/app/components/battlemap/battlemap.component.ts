@@ -229,7 +229,26 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
     if (tokenHash === this.lastSavedTokenHash) return;
     
     if (battlemap.tokens && battlemap.tokens.length > 0) {
-      this.tokens = battlemap.tokens.map(token => this.mapDtoToToken(token));
+      // Map tokens from backend, preserving any local state we need
+      const newTokens = battlemap.tokens.map(token => this.mapDtoToToken(token));
+      
+      // Merge with existing tokens to preserve avatarUrl if backend doesn't have it yet
+      // This prevents tokens from turning black during polling
+      const existingTokensMap = new Map(this.tokens.map(t => [t.id, t]));
+      const mergedTokens = newTokens.map(newToken => {
+        const existing = existingTokensMap.get(newToken.id);
+        if (existing && existing.avatarUrl && !newToken.avatarUrl) {
+          // Preserve avatarUrl from existing token if backend doesn't have it
+          newToken.avatarUrl = existing.avatarUrl;
+        }
+        if (existing && existing.characterId && !newToken.characterId) {
+          // Preserve characterId from existing token
+          newToken.characterId = existing.characterId;
+        }
+        return newToken;
+      });
+      
+      this.tokens = mergedTokens;
       this.nextTokenId = Math.max(...this.tokens.map(t => t.id), 0) + 1;
       this.loadTokenAvatars();
     } else {
@@ -240,15 +259,28 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
   }
   
   private mapDtoToToken(dto: BattlemapToken): { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string } {
+    // Map from backend JSON property names (tid, gm, url, bc) to internal names
+    // Backend uses shortened property names via @JsonProperty annotations
+    const tokenId = dto.tokenId ?? dto.tid ?? dto.id;
+    const isGmOnly = dto.isGmOnly ?? dto.gm ?? false;
+    const avatarUrl = dto.avatarUrl ?? dto.url;
+    const borderColor = dto.borderColor ?? dto.bc;
+    
+    if (!tokenId && tokenId !== 0) {
+      console.warn('Token missing tokenId/tid:', dto);
+    }
+    
+    // tokenId is used as both the token identifier and character ID when it's a player token
+    // Set characterId to tokenId so we can match it with characters later
     return {
-      id: dto.tokenId,
-      x: dto.x,
-      y: dto.y,
-      isGmOnly: dto.isGmOnly || false,
-      characterId: undefined,
-      avatarUrl: dto.avatarUrl,
+      id: tokenId ?? 0, // Fallback to 0 if undefined, but log warning
+      x: dto.x ?? 0,
+      y: dto.y ?? 0,
+      isGmOnly: isGmOnly,
+      characterId: tokenId, // Preserve tokenId as characterId for player tokens
+      avatarUrl: avatarUrl,
       color: dto.color,
-      borderColor: dto.borderColor,
+      borderColor: borderColor,
       name: dto.name
     };
   }
@@ -407,21 +439,23 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
   }
   
   private mapTokenToDto(token: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string }): BattlemapToken {
+    // Map to backend JSON format using shortened property names
+    // Backend uses @JsonProperty annotations: tid, gm, url, bc
     const dto: BattlemapToken = {
-      tokenId: token.id,
+      tid: token.id, // Backend expects "tid" in JSON
       x: token.x,
       y: token.y,
-      isGmOnly: token.isGmOnly
+      gm: token.isGmOnly // Backend expects "gm" in JSON
     };
     
     if (token.color !== undefined) {
       dto.color = token.color;
     }
     if (token.avatarUrl !== undefined) {
-      dto.avatarUrl = token.avatarUrl;
+      dto.url = token.avatarUrl; // Backend expects "url" in JSON
     }
     if (token.borderColor !== undefined) {
-      dto.borderColor = token.borderColor;
+      dto.bc = token.borderColor; // Backend expects "bc" in JSON
     }
     if (token.name !== undefined) {
       dto.name = token.name;
@@ -940,6 +974,7 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
     
     const mousePos = this.getMousePosition(event);
     if (!mousePos) return;
+    console.log('tokens: ', this.tokens);
     
     // Token position in viewport coordinates (accounting for CSS transform: translate + scale)
     const tokenViewportCoords = this.gridService.canvasToViewport(token.x, token.y, this.panX, this.panY, this.zoomLevel);
@@ -1086,7 +1121,11 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
   }
   
   private updateOrCreateTokenFromDrop(characterData: { characterId: number; characterName: string; avatarUrl: string }, position: { x: number; y: number }): void {
-    const existingToken = this.tokens.find(t => t.id === characterData.characterId);
+    // Check for existing token by both id and characterId to handle tokens loaded from backend
+    const existingToken = this.tokens.find(t => 
+      t.id === characterData.characterId || 
+      t.characterId === characterData.characterId
+    );
     
     if (existingToken) {
       this.updateExistingTokenFromDrop(existingToken, characterData, position);
@@ -1149,17 +1188,19 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
   
   private updateTokensWithCharacterData(characterMap: Map<number, Character>, avatarMap: Map<number, string>): void {
     this.tokens.forEach(token => {
-      if (characterMap.has(token.id)) {
-        token.characterId = token.id;
-        const character = characterMap.get(token.id);
+      // Check by both id and characterId to handle all cases
+      const characterId = token.characterId || token.id;
+      if (characterMap.has(characterId)) {
+        token.characterId = characterId;
+        const character = characterMap.get(characterId);
         if (character && !token.name) {
           token.name = character.name;
         }
-        if (!token.avatarUrl && !token.color) {
-          const avatarUrl = avatarMap.get(token.id);
-          if (avatarUrl) {
-            token.avatarUrl = avatarUrl;
-          }
+        // Always update avatarUrl from character for character tokens
+        // This ensures tokens always have the correct avatar, even after polling updates
+        const avatarUrl = avatarMap.get(characterId);
+        if (avatarUrl) {
+          token.avatarUrl = avatarUrl;
         }
       }
     });
