@@ -138,11 +138,43 @@ public class SVGUtil {
     }
 
     public static String getSvgFromFile(String filename) {
+        String resourcePath = "static/svg/" + filename.toLowerCase() + ".svg";
+        ClassPathResource resource = new ClassPathResource(resourcePath);
+        
         try {
-            byte[] bytes = new ClassPathResource("static/svg/" + filename.toLowerCase() + ".svg").getInputStream().readAllBytes();
-            return new String(bytes, StandardCharsets.UTF_8).replaceAll("(<\\/?svg.*?>)", "");
+            if (!resource.exists()) {
+                // Try alternative paths for case sensitivity issues
+                String[] alternatives = {
+                    "static/svg/" + filename + ".svg",  // Original case
+                    "static/SVG/" + filename.toLowerCase() + ".svg",  // Capitalized directory
+                    "static/SVG/" + filename + ".svg"   // Both capitalized
+                };
+                
+                boolean found = false;
+                for (String altPath : alternatives) {
+                    ClassPathResource altResource = new ClassPathResource(altPath);
+                    if (altResource.exists()) {
+                        resource = altResource;
+                        resourcePath = altPath;
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if (!found) {
+                    throw new IOException("Resource does not exist at: " + resourcePath + " (and alternatives not found)");
+                }
+            }
+            
+            byte[] bytes = resource.getInputStream().readAllBytes();
+            if (bytes.length == 0) {
+                throw new IOException("Resource file is empty: " + resourcePath);
+            }
+            
+            String content = new String(bytes, StandardCharsets.UTF_8);
+            return content.replaceAll("(<\\/?svg.*?>)", "");
         } catch (IOException e) {
-            throw new RuntimeException("Failed to read SVG file: " + filename, e);
+            throw new RuntimeException("Failed to read SVG file: " + filename + " (tried path: " + resourcePath + ")", e);
         }
     }
 }

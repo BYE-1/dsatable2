@@ -3,6 +3,8 @@ package de.byedev.dsatable2.dsa_table_backend.web;
 import de.byedev.dsatable2.dsa_table_backend.util.SVGUtil;
 import de.byedev.dsatable2.dsa_table_backend.web.dto.EnvironmentObjectTypeDto;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +18,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/env-object")
 public class EnvironmentObjectController {
+
+    private static final Logger logger = LoggerFactory.getLogger(EnvironmentObjectController.class);
 
     public static final String PARAM_TYPE = "type";
     public static final String PARAM_COLOR = "color";
@@ -137,7 +141,22 @@ public class EnvironmentObjectController {
     }
 
     private String addTree(int variant) {
-        return SVGUtil.getSvgFromFile("tree"+variant);
+        try {
+            return SVGUtil.getSvgFromFile("tree"+variant);
+        } catch (RuntimeException e) {
+            logger.error("Failed to load tree{} SVG, falling back to tree1", variant, e);
+            // Fallback to tree1 if variant not found
+            if (variant != 1) {
+                try {
+                    return SVGUtil.getSvgFromFile("tree1");
+                } catch (RuntimeException e2) {
+                    logger.error("Failed to load fallback tree1 SVG", e2);
+                    // Return empty SVG if all fails
+                    return "<circle cx='40' cy='50' r='20' fill='#228B22'/>";
+                }
+            }
+            throw e;
+        }
     }
 
     private String addStone(String color) {
@@ -152,7 +171,14 @@ public class EnvironmentObjectController {
     }
 
     private String addHouse() {
-        return SVGUtil.getSvgFromFile("house");
+        try {
+            return SVGUtil.getSvgFromFile("house");
+        } catch (RuntimeException e) {
+            logger.error("Failed to load house SVG, using fallback", e);
+            // Return fallback SVG
+            return "<rect x='0' y='0' width='80' height='80' fill='#8B4513'/>" +
+                   "<polygon points='0,0 80,0 60,40 20,40' fill='#654321'/>";
+        }
     }
 
     private Color parseColor(String colorString, String defaultColor) {
