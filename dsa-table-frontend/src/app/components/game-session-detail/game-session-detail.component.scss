@@ -452,6 +452,11 @@
     position: relative;
     z-index: 1;
   }
+
+  .dice-panel {
+    position: relative;
+    z-index: 1;
+  }
 }
 
 .dice-menu-title {
@@ -701,8 +706,9 @@
 }
 
 .talent-select-wrapper {
-  flex: 1;
-  min-width: 180px;
+  flex: 0 0 auto;
+  max-width: fit-content;
+  min-width: 300px;
   position: relative;
   z-index: 1000;
   isolation: isolate;
@@ -825,8 +831,9 @@
 }
 
 .talent-select {
-  flex: 1;
-  min-width: 180px;
+  flex: 0 0 auto;
+  min-width: 140px;
+  max-width: 220px;
   padding: 0.3rem 0.5rem;
   border: 1px solid rgba(212, 196, 168, 0.4);
   border-radius: 5px;
@@ -847,6 +854,13 @@
     background: #e9ecef;
     cursor: not-allowed;
   }
+}
+
+// More compact weapon selector in dice box
+.weapon-select-wrapper {
+  flex: 0 0 auto;
+  min-width: 130px;
+  max-width: 200px;
 }
 
 .dice-btn.talent {
@@ -902,7 +916,7 @@
   border: 2px solid #d9d0c0;
   border-radius: 12px;
   padding: 2rem;
-  max-width: 500px;
+  max-width: 640px;
   width: 90%;
   box-shadow: 
     0 8px 32px rgba(0, 0, 0, 0.12),
@@ -918,6 +932,76 @@
   p {
     color: #5a4630;
     margin-bottom: 1.5rem;
+  }
+
+  // Table-style layout for weapons management inside this modal
+  .abilities-list {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    display: table;
+    table-layout: fixed;
+  }
+
+  .abilities-list thead th {
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #5a4630;
+    padding: 0.25rem 0.4rem;
+    border-bottom: 1px solid rgba(212, 196, 168, 0.6);
+    white-space: nowrap;
+  }
+
+  .abilities-list tbody td {
+    padding: 0.2rem 0.3rem;
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(212, 196, 168, 0.3);
+  }
+
+  .abilities-list tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .abilities-list input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.25rem 0.35rem;
+    border: 1px solid rgba(212, 196, 168, 0.6);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: 'Kalam', cursive;
+    background: rgba(255, 255, 255, 0.95);
+    color: #5a4630;
+
+    &:focus {
+      outline: none;
+      border-color: rgba(139, 117, 80, 0.7);
+      box-shadow: 0 0 0 2px rgba(139, 117, 80, 0.15);
+    }
+  }
+
+  .abilities-list select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.25rem 0.35rem;
+    border: 1px solid rgba(212, 196, 168, 0.6);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: 'Kalam', cursive;
+    background: rgba(255, 255, 255, 0.95);
+    color: #5a4630;
+
+    &:focus {
+      outline: none;
+      border-color: rgba(139, 117, 80, 0.7);
+      box-shadow: 0 0 0 2px rgba(139, 117, 80, 0.15);
+    }
+  }
+
+  .selection-actions {
+    margin-top: 0.75rem;
+    gap: 0.5rem;
   }
 }
 

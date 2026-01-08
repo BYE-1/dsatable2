@@ -8,7 +8,9 @@ import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
 import { UserService } from '../../services/user.service';
 import { GameSession } from '../../models/game-session.model';
-import { Character, Talent, Spell } from '../../models/character.model';
+import { Character, Talent, Spell, Weapon } from '../../models/character.model';
+import { rollAttackOrParry } from '../../utils/dsa-rolls.util';
+import { WeaponManagerDialogComponent } from './weapon-manager-dialog.component';
 import { ChatComponent } from '../chat/chat.component';
 import { BattlemapComponent } from '../battlemap/battlemap.component';
 import { environment } from '../../../environments/environment';
@@ -18,7 +20,7 @@ import { switchMap, startWith, map, catchError } from 'rxjs/operators';
 @Component({
   selector: 'app-game-session-detail',
   standalone: true,
-  imports: [CommonModule, ChatComponent, BattlemapComponent, FormsModule],
+  imports: [CommonModule, ChatComponent, BattlemapComponent, FormsModule, WeaponManagerDialogComponent],
   templateUrl: './game-session-detail.component.html',
   styleUrl: './game-session-detail.component.scss'
 })
@@ -68,6 +70,10 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
   aspModValue: number = 0;
   woundsValue: number | null = null;
   beModValue: number = 0;
+
+  // Weapons & combat rolls
+  selectedWeaponId: number | null = null;
+  showWeaponsDialog: boolean = false;
 
   constructor(
     private route: ActivatedRoute,
@@ -121,14 +127,7 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
         
         if (currentIds !== newIds || this.characters.length !== data.length) {
           // Sort by initiative (descending), then by name
-          this.characters = data.sort((a, b) => {
-            const initA = a.initiative ?? 0;
-            const initB = b.initiative ?? 0;
-            if (initA !== initB) {
-              return initB - initA; // Higher initiative first
-            }
-            return (a.name || '').localeCompare(b.name || '');
-          });
+          this.characters = this.sortCharactersList(data);
           // Load owner names for any new characters
           this.loadOwnerNames(this.characters);
         } else {
@@ -142,14 +141,7 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
             }
           });
           // Re-sort in case initiative values changed
-          this.characters.sort((a, b) => {
-            const initA = a.initiative ?? 0;
-            const initB = b.initiative ?? 0;
-            if (initA !== initB) {
-              return initB - initA;
-            }
-            return (a.name || '').localeCompare(b.name || '');
-          });
+          this.characters = this.sortCharactersList(this.characters);
         }
       },
       error: (err: any) => {
@@ -202,6 +194,20 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
     }
   }
 
+  /**
+   * Sort characters by initiative (descending) and then by name.
+   */
+  private sortCharactersList(chars: Character[]): Character[] {
+    return [...chars].sort((a, b) => {
+      const initA = a.initiative ?? 0;
+      const initB = b.initiative ?? 0;
+      if (initA !== initB) {
+        return initB - initA; // Higher initiative first
+      }
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }
+
   loadSession(): void {
     if (!this.sessionId) return;
 
@@ -234,14 +240,7 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
         const hasChanged = currentIds !== newIds || this.characters.length !== data.length;
         
         // Sort by initiative (descending), then by name
-        const sortedData = data.sort((a, b) => {
-          const initA = a.initiative ?? 0;
-          const initB = b.initiative ?? 0;
-          if (initA !== initB) {
-            return initB - initA; // Higher initiative first
-          }
-          return (a.name || '').localeCompare(b.name || '');
-        });
+        const sortedData = this.sortCharactersList(data);
         
         if (hasChanged) {
           // Replace entire array if characters changed
@@ -255,14 +254,7 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
             }
           });
           // Re-sort in case initiative values changed
-          this.characters.sort((a, b) => {
-            const initA = a.initiative ?? 0;
-            const initB = b.initiative ?? 0;
-            if (initA !== initB) {
-              return initB - initA;
-            }
-            return (a.name || '').localeCompare(b.name || '');
-          });
+          this.characters = this.sortCharactersList(this.characters);
         }
         
         // Load owner information for characters
@@ -388,6 +380,7 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
       next: (character: Character | null) => {
         if (character) {
           this.myCharacter = character;
+          this.initializeSelectedWeapon(this.myCharacter);
           this.showCharacterSelection = false;
           // Load full character data with properties and talents
           if (character.id) {
@@ -451,6 +444,8 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
     this.characterService.getCharacterById(characterId).subscribe({
       next: (character: Character) => {
         this.myCharacter = character;
+        // Initialize selected weapon when full character (with weapons) is loaded
+        this.initializeSelectedWeapon(this.myCharacter);
       },
       error: (err: any) => {
         console.error('Error loading full character:', err);
@@ -950,20 +945,27 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
   performRest(): void {
     if (!this.myCharacter || !this.myCharacter.id) return;
     
-    // Rest typically restores some life and ASP
-    // For now, we'll restore 1 Life and 1 ASP per rest
-    const newLife = Math.min((this.myCharacter.currentLife || 0) + 1, this.getMaxLife());
-    const newAsp = Math.min((this.myCharacter.currentAsp || 0) + 1, this.getMaxAsp());
-    const updatedCharacter = { 
-      ...this.myCharacter, 
-      currentLife: newLife,
-      currentAsp: newAsp
-    };
-    
-    this.characterService.updateCharacter(this.myCharacter.id, updatedCharacter).subscribe({
+    // Call backend to perform rest with proper regeneration calculation
+    this.characterService.performRest(this.myCharacter.id).subscribe({
       next: (character: Character) => {
+        // Calculate the actual regeneration amounts
+        const oldLife = this.myCharacter?.currentLife || 0;
+        const oldAsp = this.myCharacter?.currentAsp || 0;
+        const lifeRegen = (character.currentLife || 0) - oldLife;
+        const aspRegen = (character.currentAsp || 0) - oldAsp;
+        
         this.myCharacter = character;
-        const message = `${character.name} 🛌 Rest: +1 Life (${character.currentLife}), +1 ASP (${character.currentAsp})`;
+        
+        // Build message with actual regeneration amounts
+        let message = `${character.name} 🛌 Rest:`;
+        if (lifeRegen > 0) {
+          message += ` +${lifeRegen} Life (${character.currentLife})`;
+        }
+        if (aspRegen > 0) {
+          if (lifeRegen > 0) message += ',';
+          message += ` +${aspRegen} ASP (${character.currentAsp})`;
+        }
+        
         if (this.chatComponent) {
           this.chatComponent.sendMessage(message);
         }
@@ -972,6 +974,123 @@ export class GameSessionDetailComponent implements OnInit, AfterViewInit, OnDest
       },
       error: (err: any) => {
         console.error('Error performing rest:', err);
+        if (this.chatComponent) {
+          this.chatComponent.sendMessage(`❌ Error performing rest: ${err.message || 'Unknown error'}`);
+        }
+      }
+    });
+  }
+
+  // --- Weapons: rolls and management ---
+
+  private getSelectedWeapon(): Weapon | null {
+    if (!this.myCharacter || !this.myCharacter.weapons || this.myCharacter.weapons.length === 0) {
+      return null;
+    }
+    if (this.selectedWeaponId == null) {
+      return this.myCharacter.weapons[0] || null;
+    }
+    const idNum = Number(this.selectedWeaponId);
+    const weapon = this.myCharacter.weapons.find(w => {
+      if (w.id === undefined || w.id === null) return false;
+      return Number(w.id) === idNum;
+    });
+    return weapon || this.myCharacter.weapons[0] || null;
+  }
+
+  private initializeSelectedWeapon(character: Character | null): void {
+    if (!character || !character.weapons || character.weapons.length === 0) {
+      this.selectedWeaponId = null;
+      return;
+    }
+
+    const firstWeapon = character.weapons[0];
+    if (firstWeapon.id !== undefined && firstWeapon.id !== null) {
+      this.selectedWeaponId = Number(firstWeapon.id);
+    } else {
+      this.selectedWeaponId = null;
+    }
+  }
+
+  rollAttack(): void {
+    this.rollAtPa(true);
+  }
+
+  rollParry(): void {
+    this.rollAtPa(false);
+  }
+
+  rollDodge(): void {
+    if (!this.sessionId || !this.chatComponent || !this.myCharacter) return;
+
+    const roll = Math.floor(Math.random() * 20) + 1;
+    const msg = `${this.myCharacter.name} 🌀 Dodge roll: d20 = ${roll}`;
+    this.chatComponent.sendMessage(msg);
+  }
+
+  private rollAtPa(isAttack: boolean, mod: number = 0, bonusDmg: number = 0): void {
+    if (!this.sessionId || !this.chatComponent || !this.myCharacter) return;
+
+    const weapon = this.getSelectedWeapon();
+    if (!weapon) {
+      this.chatComponent.sendMessage(`❌ Keine Waffe für ${isAttack ? 'Angriff' : 'Parade'} ausgewählt.`);
+      return;
+    }
+
+    // Find matching combat talent by name
+    const talentName = weapon.combatTalent;
+    const combatTalent = this.myCharacter.combatTalents?.find(ct => ct.name === talentName);
+    if (!combatTalent) {
+      this.chatComponent.sendMessage(`❌ Kampftalent "${talentName}" für Waffe "${weapon.name}" nicht gefunden.`);
+      return;
+    }
+
+    const ctx = {
+      heroName: this.myCharacter.name,
+      wearingArmour: !!this.myCharacter.wearingArmour,
+      armourBe: this.myCharacter.armourBe || 0,
+      wounds: this.myCharacter.wounds || 0
+    };
+
+    const message = rollAttackOrParry(ctx, weapon, combatTalent, isAttack, mod, bonusDmg);
+    this.chatComponent.sendMessage(message);
+  }
+
+  openWeaponsDialog(): void {
+    if (!this.myCharacter) return;
+    this.showWeaponsDialog = true;
+  }
+
+  onWeaponsDialogClosed(): void {
+    this.showWeaponsDialog = false;
+  }
+
+  onWeaponsSaved(weapons: Weapon[]): void {
+    if (!this.myCharacter || !this.myCharacter.id) return;
+
+    const updatedCharacter: Character = {
+      ...this.myCharacter,
+      weapons
+    };
+
+    this.characterService.updateCharacter(this.myCharacter.id, updatedCharacter).subscribe({
+      next: (character: Character) => {
+        this.myCharacter = character;
+        this.showWeaponsDialog = false;
+
+        // Ensure selected weapon still valid
+        if (this.myCharacter.weapons && this.myCharacter.weapons.length > 0) {
+          const existing = this.getSelectedWeapon();
+          if (!existing) {
+            const first = this.myCharacter.weapons[0];
+            this.selectedWeaponId = first.id != null ? Number(first.id) : null;
+          }
+        } else {
+          this.selectedWeaponId = null;
+        }
+      },
+      error: (err: any) => {
+        console.error('Error saving weapons:', err);
       }
     });
   }

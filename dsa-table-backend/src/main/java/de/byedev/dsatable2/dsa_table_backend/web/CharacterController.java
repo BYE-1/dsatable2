@@ -154,6 +154,26 @@ public class CharacterController {
                         existing.setProperties(updated.getProperties());
                     }
 
+                    // Optionally update talents, spells, combat talents, advantages, specialities
+                    if (updated.getTalents() != null) {
+                        existing.setTalents(updated.getTalents());
+                    }
+                    if (updated.getSpells() != null) {
+                        existing.setSpells(updated.getSpells());
+                    }
+                    if (updated.getCombatTalents() != null) {
+                        existing.setCombatTalents(updated.getCombatTalents());
+                    }
+                    if (updated.getAdvantages() != null) {
+                        existing.setAdvantages(updated.getAdvantages());
+                    }
+                    if (updated.getSpecialities() != null) {
+                        existing.setSpecialities(updated.getSpecialities());
+                    }
+                    if (updated.getWeapons() != null) {
+                        existing.setWeapons(updated.getWeapons());
+                    }
+
                     Character saved = characterRepository.save(existing);
                     return ResponseEntity.ok(saved);
                 })
@@ -301,6 +321,40 @@ public class CharacterController {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Failed to parse XML: " + e.getMessage()));
         }
+    }
+
+    @PostMapping("/{id}/rest")
+    @Transactional
+    @CacheEvict(value = "characters", allEntries = true)
+    @Operation(summary = "Perform rest for character", description = "Restore life and ASP based on character stats")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Rest performed successfully"),
+            @ApiResponse(responseCode = "404", description = "Character not found")
+    })
+    public ResponseEntity<Character> performRest(@PathVariable Long id) {
+        return characterRepository.findById(id)
+                .map(character -> {
+                    // Calculate regeneration based on character stats
+                    int lifeRegen = character.getLifeRegen();
+                    int aspRegen = character.getAspRegen();
+                    
+                    // Apply regeneration (cap at max values)
+                    int newLife = Math.min(
+                        character.getCurrentLife() + lifeRegen,
+                        character.getTotalLife()
+                    );
+                    int newAsp = Math.min(
+                        character.getCurrentAsp() + aspRegen,
+                        character.getMagicEnergy()
+                    );
+                    
+                    character.setCurrentLife(newLife);
+                    character.setCurrentAsp(newAsp);
+                    
+                    Character saved = characterRepository.save(character);
+                    return ResponseEntity.ok(saved);
+                })
+                .orElse(ResponseEntity.notFound().build());
     }
 
 }

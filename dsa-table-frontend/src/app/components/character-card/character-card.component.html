@@ -145,6 +145,25 @@
           </div>
         </div>
       </div>
+
+      <div class="detail-section" *ngIf="character.weapons && character.weapons.length > 0">
+        <h4 class="section-title collapsible" (click)="toggleSection('weapons')">
+          <span class="collapse-icon">{{ isCollapsed('weapons') ? '▶' : '▼' }}</span>
+          Weapons <span class="count-badge">({{ character.weapons.length }})</span>
+        </h4>
+        <div class="abilities-list" *ngIf="!isCollapsed('weapons')">
+          <div *ngFor="let weapon of character.weapons" class="ability-item">
+            <span class="ability-name">{{ weapon.name }}</span>
+            <span class="ability-value">
+              AT {{ weapon.atMod >= 0 ? '+' + weapon.atMod : weapon.atMod }},
+              PA {{ weapon.paMod >= 0 ? '+' + weapon.paMod : weapon.paMod }},
+              {{ weapon.numberOfDice }}W + {{ weapon.damageBonus }},
+              Ini {{ weapon.iniMod >= 0 ? '+' + weapon.iniMod : weapon.iniMod }},
+              {{ weapon.combatTalent }}
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

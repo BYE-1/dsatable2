@@ -246,7 +246,8 @@ public class GameSessionController {
     }
 
     @GetMapping("/{id}/battlemap")
-    @Transactional
+    @Transactional(readOnly = true)
+    @Cacheable(value = "battlemaps", key = "#id")
     public ResponseEntity<BattlemapDto> getBattlemap(@PathVariable Long id) {
         // Verify session exists
         if (!gameSessionRepository.existsById(id)) {

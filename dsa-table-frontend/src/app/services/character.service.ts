@@ -56,6 +56,10 @@ export class CharacterService {
     }
     return this.http.post<Character>(`${this.apiUrl}/upload-xml`, formData);
   }
+
+  performRest(id: number): Observable<Character> {
+    return this.http.post<Character>(`${this.apiUrl}/${id}/rest`, {});
+  }
 }
 
 

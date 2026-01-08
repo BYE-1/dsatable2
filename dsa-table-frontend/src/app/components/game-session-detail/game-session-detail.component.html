@@ -19,7 +19,9 @@
         <select 
           [(ngModel)]="selectedCharacterId" 
           class="character-select"
-          [disabled]="joiningSession">
+          [disabled]="joiningSession"
+          title="Select a character to join the session"
+          aria-label="Select a character to join the session">
           <option [value]="null" disabled>Select a character...</option>
           <option *ngFor="let char of availableCharacters" [value]="char.id">
             {{ char.name }} 
@@ -118,6 +120,50 @@
           <span class="dice-icon">⚙️</span>
           <span class="dice-label">Custom</span>
         </button>
+          <div class="talent-select-wrapper"  *ngIf="myCharacter && ((myCharacter.talents && myCharacter.talents.length > 0) || (myCharacter.spells && myCharacter.spells.length > 0))"  #talentWrapper>
+            <input
+              type="text"
+              [(ngModel)]="talentSearchTerm"
+              (focus)="onTalentInputFocus()"
+              (blur)="onTalentInputBlur()"
+              (keydown)="onTalentInputKeyDown($event)"
+              (input)="onTalentInputChange()"
+              [placeholder]="getSelectedTalentName()"
+              class="talent-search-input"
+              #talentInput
+              [disabled]="(!myCharacter.talents || myCharacter.talents.length === 0) && (!myCharacter.spells || myCharacter.spells.length === 0)"
+              title="Search and select a talent or spell">
+            <div *ngIf="showTalentDropdown && getFilteredTalents().length > 0" 
+                 class="talent-dropdown"
+                 [style.left.px]="dropdownPosition.left"
+                 [style.bottom.px]="dropdownPosition.bottom"
+                 [style.width.px]="dropdownPosition.width">
+              <div
+                *ngFor="let item of getFilteredTalents(); let i = index"
+                (mousedown)="selectTalent(item.id, item.isSpell)"
+                (mouseenter)="highlightedTalentIndex = i"
+                class="talent-option"
+                [class.highlighted]="isTalentHighlighted(i)">
+                <span class="talent-name">
+                  <span *ngIf="item.isSpell" class="spell-label">✨ </span>{{ item.name }}
+                </span>
+                <span class="talent-details">({{ item.check }}) - {{ item.value }}</span>
+              </div>
+            </div>
+            <div *ngIf="showTalentDropdown && getFilteredTalents().length === 0 && talentSearchTerm.trim()" 
+                 class="talent-dropdown"
+                 [style.left.px]="dropdownPosition.left"
+                 [style.bottom.px]="dropdownPosition.bottom"
+                 [style.width.px]="dropdownPosition.width">
+              <div class="talent-option no-results">No talents or spells found</div>
+            </div>
+          </div>
+          <button 
+            class="dice-btn" 
+            (click)="rollTalentCheck()"
+            [disabled]="!selectedTalentId">
+            Roll Check
+          </button>
       </div>
       <div *ngIf="showCustomRoll" class="custom-roll-panel">
         <input 
@@ -129,50 +175,36 @@
           max="1000">
         <button class="dice-btn" (click)="rollCustomDice()">Roll</button>
       </div>
-      <div *ngIf="myCharacter && ((myCharacter.talents && myCharacter.talents.length > 0) || (myCharacter.spells && myCharacter.spells.length > 0))" class="talent-roll-panel">
-        <div class="talent-select-wrapper" #talentWrapper>
-          <input
-            type="text"
-            [(ngModel)]="talentSearchTerm"
-            (focus)="onTalentInputFocus()"
-            (blur)="onTalentInputBlur()"
-            (keydown)="onTalentInputKeyDown($event)"
-            (input)="onTalentInputChange()"
-            [placeholder]="getSelectedTalentName()"
+      
+
+      <!-- Weapons & combat rolls -->
+      <div *ngIf="myCharacter" class="talent-roll-panel">
+        <div class="talent-select-wrapper weapon-select-wrapper">
+          <select
+            [(ngModel)]="selectedWeaponId"
             class="talent-search-input"
-            #talentInput
-            [disabled]="(!myCharacter.talents || myCharacter.talents.length === 0) && (!myCharacter.spells || myCharacter.spells.length === 0)"
-            title="Search and select a talent or spell">
-          <div *ngIf="showTalentDropdown && getFilteredTalents().length > 0" 
-               class="talent-dropdown"
-               [style.left.px]="dropdownPosition.left"
-               [style.bottom.px]="dropdownPosition.bottom"
-               [style.width.px]="dropdownPosition.width">
-            <div
-              *ngFor="let item of getFilteredTalents(); let i = index"
-              (mousedown)="selectTalent(item.id, item.isSpell)"
-              (mouseenter)="highlightedTalentIndex = i"
-              class="talent-option"
-              [class.highlighted]="isTalentHighlighted(i)">
-              <span class="talent-name">
-                <span *ngIf="item.isSpell" class="spell-label">✨ </span>{{ item.name }}
-              </span>
-              <span class="talent-details">({{ item.check }}) - {{ item.value }}</span>
-            </div>
-          </div>
-          <div *ngIf="showTalentDropdown && getFilteredTalents().length === 0 && talentSearchTerm.trim()" 
-               class="talent-dropdown"
-               [style.left.px]="dropdownPosition.left"
-               [style.bottom.px]="dropdownPosition.bottom"
-               [style.width.px]="dropdownPosition.width">
-            <div class="talent-option no-results">No talents or spells found</div>
-          </div>
+            [disabled]="!myCharacter.weapons || myCharacter.weapons.length === 0"
+            title="Select weapon for attack/parry rolls"
+            aria-label="Select weapon for attack and parry rolls">
+            <option [ngValue]="null" *ngIf="!myCharacter.weapons || myCharacter.weapons.length === 0">
+              No weapons
+            </option>
+            <option *ngFor="let w of myCharacter.weapons" [ngValue]="w.id">
+              {{ w.name }} (AT {{ w.atMod >= 0 ? '+' + w.atMod : w.atMod }}, PA {{ w.paMod >= 0 ? '+' + w.paMod : w.paMod }})
+            </option>
+          </select>
         </div>
-        <button 
-          class="dice-btn" 
-          (click)="rollTalentCheck()"
-          [disabled]="!selectedTalentId">
-          Roll Check
+        <button class="dice-btn" (click)="rollAttack()">
+          Roll Attack
+        </button>
+        <button class="dice-btn" (click)="rollParry()">
+          Roll Parry
+        </button>
+        <button class="dice-btn" (click)="rollDodge()">
+          Roll Dodge
+        </button>
+        <button class="dice-btn custom" (click)="openWeaponsDialog()">
+          Manage Weapons
         </button>
       </div>
       
@@ -216,7 +248,8 @@
             class="stat-input-small"
             (focus)="onWoundsFocus()"
             (keyup.enter)="setWounds()"
-            (blur)="setWounds()">
+            (blur)="setWounds()"
+            title="Set wounds value">
         </div>
         
         <!-- BE Controls -->
@@ -240,5 +273,14 @@
       </div>
     </div>
   </div>
+
+  <!-- Weapons Management Dialog (child component) -->
+  <app-weapon-manager-dialog
+    [visible]="showWeaponsDialog"
+    [character]="myCharacter"
+    [weapons]="myCharacter?.weapons || []"
+    (closed)="onWeaponsDialogClosed()"
+    (saved)="onWeaponsSaved($event)">
+  </app-weapon-manager-dialog>
 </div>
 

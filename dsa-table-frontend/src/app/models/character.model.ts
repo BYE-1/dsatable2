@@ -22,6 +22,7 @@ export interface Character {
   talents?: Talent[];
   spells?: Spell[];
   combatTalents?: CombatTalent[];
+  weapons?: Weapon[];
   advantages?: Advantage[];
   specialities?: Speciality[];
 }
@@ -51,6 +52,17 @@ export interface CombatTalent {
   name: string;
   attack: number;
   parry: number;
+}
+
+export interface Weapon {
+  id?: number;
+  name: string;
+  atMod: number;
+  paMod: number;
+  numberOfDice: number;
+  damageBonus: number;
+  iniMod: number;
+  combatTalent: string;
 }
 
 export interface Advantage {

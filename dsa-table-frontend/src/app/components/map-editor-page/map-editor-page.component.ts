@@ -305,7 +305,50 @@ export class MapEditorPageComponent implements OnInit {
     this.loadingMaps = true;
     this.savedMapsService.getMapById(Number(this.selectedMapId)).subscribe({
       next: (map) => {
-        // Update URL to load the saved map
+        // Update currentDataParam
+        this.currentDataParam = map.dataParam;
+        
+        // Decode and update initialData immediately so the map refreshes
+        try {
+          const data = this.decodeDataParam(map.dataParam);
+          
+          // Handle migration from old canvasWidth/canvasHeight format
+          if (data.gridWidth && data.gridHeight) {
+            this.initialData = {
+              gridWidth: data.gridWidth || 16,
+              gridHeight: data.gridHeight || 16,
+              cellBackgrounds: data.cellBackgrounds,
+              cellWater: data.cellWater,
+              tokens: data.tokens || [],
+              environmentObjects: data.environmentObjects || []
+            };
+          } else if ((data as any).canvasWidth && (data as any).canvasHeight) {
+            // Convert old pixel dimensions to grid cells (32px per cell)
+            this.initialData = {
+              gridWidth: Math.round((data as any).canvasWidth / 32) || 16,
+              gridHeight: Math.round((data as any).canvasHeight / 32) || 16,
+              cellBackgrounds: data.cellBackgrounds,
+              cellWater: data.cellWater,
+              tokens: data.tokens || [],
+              environmentObjects: data.environmentObjects || []
+            };
+          } else {
+            this.initialData = {
+              gridWidth: 16,
+              gridHeight: 16,
+              cellBackgrounds: data.cellBackgrounds,
+              tokens: data.tokens || [],
+              environmentObjects: data.environmentObjects || []
+            };
+          }
+        } catch (error) {
+          console.error('Error decoding map data:', error);
+          this.loadingMaps = false;
+          alert(this.translateService.instant('map.mapLoadFailed'));
+          return;
+        }
+        
+        // Update URL to reflect the loaded map (for sharing/bookmarking)
         this.router.navigate([], {
           relativeTo: this.route,
           queryParams: { data: map.dataParam },
@@ -607,7 +650,7 @@ export class MapEditorPageComponent implements OnInit {
 
   // Environment object binary packing format:
   // Per object: [type(1), x(2), y(2), flags(1), color?(3), size?(1)]
-  // type: 0=tree, 1=stone, 2=house
+  // type: 0-7=tree1-tree8, 8=stone, 9=house (10=tree for backward compatibility, maps to tree1)
   // flags: bit 0=hasColor, bit 1=hasSize
   // x, y: uint16 little-endian
   // color: RGB (3 bytes) if hasColor flag set
@@ -615,11 +658,19 @@ export class MapEditorPageComponent implements OnInit {
   private packEnvironmentObjects(objects: EnvironmentObject[]): Uint8Array {
     const output: number[] = [];
     
-    // Type mapping
+    // Type mapping: tree1-tree8 map to 0-7, stone=8, house=9, tree=0 (backward compatibility)
     const typeMap: { [key: string]: number } = {
-      'tree': 0,
-      'stone': 1,
-      'house': 2
+      'tree1': 0,
+      'tree2': 1,
+      'tree3': 2,
+      'tree4': 3,
+      'tree5': 4,
+      'tree6': 5,
+      'tree7': 6,
+      'tree8': 7,
+      'tree': 0,  // Backward compatibility: old 'tree' maps to tree1
+      'stone': 8,
+      'house': 9
     };
     
     for (const obj of objects) {
@@ -665,7 +716,8 @@ export class MapEditorPageComponent implements OnInit {
 
   private unpackEnvironmentObjects(bytes: Uint8Array): EnvironmentObject[] {
     const objects: EnvironmentObject[] = [];
-    const typeNames: string[] = ['tree', 'stone', 'house'];
+    // Type mapping: 0-7=tree1-tree8, 8=stone, 9=house
+    const typeNames: string[] = ['tree1', 'tree2', 'tree3', 'tree4', 'tree5', 'tree6', 'tree7', 'tree8', 'stone', 'house'];
     let byteIdx = 0;
     let objId = 1; // Generate IDs starting from 1
     
@@ -674,7 +726,8 @@ export class MapEditorPageComponent implements OnInit {
       
       // Type (1 byte)
       const typeValue = bytes[byteIdx++] & 0xFF;
-      const type = typeNames[typeValue] || 'tree';
+      // Map type value to type name, default to tree1 for backward compatibility
+      const type = typeNames[typeValue] || 'tree1';
       
       // X coordinate (2 bytes, little-endian)
       const x = bytes[byteIdx++] | (bytes[byteIdx++] << 8);
@@ -706,7 +759,7 @@ export class MapEditorPageComponent implements OnInit {
       
       objects.push({
         id: objId++,
-        type: type as 'tree' | 'stone' | 'house',
+        type: type as 'tree1' | 'tree2' | 'tree3' | 'tree4' | 'tree5' | 'tree6' | 'tree7' | 'tree8' | 'tree' | 'stone' | 'house',
         x,
         y,
         color,

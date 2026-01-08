@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, ViewChild, ElementRef, AfterViewInit, HostListener, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewInit, HostListener, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
@@ -32,7 +32,7 @@ export interface BattlemapEditorData {
   templateUrl: './battlemap-editor.component.html',
   styleUrl: './battlemap-editor.component.scss'
 })
-export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestroy {
+export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewInit, OnDestroy {
   @Input() initialData?: BattlemapEditorData;
   @Input() gridWidth: number = 16; // Default 16 cells (512px at 32px per cell)
   @Input() gridHeight: number = 16; // Default 16 cells (512px at 32px per cell)
@@ -122,6 +122,21 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
   ) {}
 
   ngOnInit(): void {
+    this.loadInitialData();
+    this.loadObjectTypes();
+    this.loadBackgroundTextures();
+    this.updatePreview();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    // Handle changes to initialData after component initialization
+    if (changes['initialData'] && !changes['initialData'].firstChange) {
+      this.loadInitialData();
+      this.updatePreview();
+    }
+  }
+
+  private loadInitialData(): void {
     if (this.initialData) {
       // Handle migration from old canvasWidth/canvasHeight to grid dimensions
       if (this.initialData.gridWidth && this.initialData.gridHeight) {
@@ -163,9 +178,6 @@ export class BattlemapEditorComponent implements OnInit, AfterViewInit, OnDestro
       // Initialize with no water
       this.cellWater = new Array(this.gridWidth * this.gridHeight).fill(false);
     }
-    this.loadObjectTypes();
-    this.loadBackgroundTextures();
-    this.updatePreview();
   }
   
   loadBackgroundTextures(): void {

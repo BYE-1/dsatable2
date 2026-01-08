@@ -20,12 +20,13 @@
         seed="8"
         result="noise2">
     </feTurbulence>
-    <feOffset dx="0" in="noise1" out="noise11"> 
+    <feOffset dx="0" dy="0" in="noise1" result="noise11"> 
       <animate attributeName="dy" values="-512; 512" dur="40s" begin="0s" repeatCount="indefinite" />
       <animate attributeName="dx" values="-512; 512" dur="40s" begin="0s" repeatCount="indefinite" />
     </feOffset>
 
-    <feDisplacementMap in="noise2" in2="noise22"
+    <!-- Displace noise2 using animated noise11 for movement effect -->
+    <feDisplacementMap in="noise2" in2="noise11"
         scale="25"
         xChannelSelector="R"
         yChannelSelector="G"
@@ -34,7 +35,6 @@
     <feBlend in="noisecomb" in2="noise11" mode="multiply" result="combinedNoise" />
 
     <feColorMatrix in="combinedNoise" type="matrix"
-                    out="coloredNoise"
                      values="
                        0.1 0.2 0.0 0 0   
                        0.0 0.4 0.7 0 0   
@@ -43,15 +43,14 @@
                      result="blueNoise" />
 
     <!-- Apply to patch -->
-    <feBlend in="SourceGraphic" in2="coloredNoise" mode="overlay" result="colorBlended" />
+    <feBlend in="SourceGraphic" in2="blueNoise" mode="overlay" result="colorBlended" />
 
     <!-- Displace -->
     <feComposite in="colorBlended" in2="SourceGraphic" operator="in" result="finalWater2" />
     <feDisplacementMap in="finalWater2" in2="combinedNoise"
         scale="25"
         xChannelSelector="R"
-        yChannelSelector="G"
-        result="waterRaw" />
+        yChannelSelector="G" />
 
   </filter>
   </defs>

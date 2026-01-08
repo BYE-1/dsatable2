@@ -21,10 +21,11 @@ import static de.byedev.dsatable2.dsa_table_backend.model.PropertyName.*;
 @Table(name = "characters")
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonPropertyOrder({
-    "id", "name", "race", "culture", "profession", "gender", "archetype",
-    "xp", "currentLife", "currentAsp", "currentKarma", "initiative",
-    "armourBe", "wearingArmour", "wounds", "notes", "avatarUrl", "ownerId",
-    "properties", "talents", "spells", "combatTalents", "advantages", "specialities"
+        "id", "name", "race", "culture", "profession", "gender", "archetype",
+        "xp", "currentLife", "currentAsp", "currentKarma", "initiative",
+        "armourBe", "wearingArmour", "wounds", "notes", "avatarUrl", "ownerId",
+        "properties", "talents", "spells", "combatTalents", "weapons",
+        "advantages", "specialities"
 })
 public class Character {
 
@@ -128,6 +129,11 @@ public class Character {
     @JoinColumn(name = "character_id")
     @Fetch(FetchMode.SUBSELECT)
     private List<Speciality> specialities = new ArrayList<>();
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "character_id")
+    @Fetch(FetchMode.SUBSELECT)
+    private List<Weapon> weapons = new ArrayList<>();
 
     public Character() {
     }
@@ -365,6 +371,39 @@ public class Character {
             return;
         }
         talents.remove(talent);
+    }
+
+    public List<Weapon> getWeapons() {
+        return weapons;
+    }
+
+    public void setWeapons(List<Weapon> weapons) {
+        this.weapons.clear();
+        if (weapons != null && id != null) {
+            weapons.forEach(w -> {
+                w.setCharacterId(id);
+                this.weapons.add(w);
+            });
+        } else if (weapons != null) {
+            this.weapons.addAll(weapons);
+        }
+    }
+
+    public void addWeapon(Weapon weapon) {
+        if (weapon == null) {
+            return;
+        }
+        if (id != null) {
+            weapon.setCharacterId(id);
+        }
+        weapons.add(weapon);
+    }
+
+    public void removeWeapon(Weapon weapon) {
+        if (weapon == null) {
+            return;
+        }
+        weapons.remove(weapon);
     }
 
     public List<Spell> getSpells() {

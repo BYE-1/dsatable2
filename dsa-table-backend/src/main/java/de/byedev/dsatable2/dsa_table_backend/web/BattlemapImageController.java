@@ -273,6 +273,8 @@ public class BattlemapImageController {
     }
 
     private void appendDefs(StringBuilder builder) {
+        builder.append("<defs>");
+        
         // Dynamically load all texture definitions
         List<BackgroundTextureService.BackgroundTextureInfo> textures = textureService.getAllTextures();
         Set<String> loadedTextures = new HashSet<>();
@@ -295,6 +297,21 @@ public class BattlemapImageController {
                 }
             }
         }
+        
+        // Always include water filter definition here so it's available for water layer
+        try {
+            String waterSvg = SVGUtil.getSvgFromFile("water");
+            if (waterSvg != null && !waterSvg.isEmpty()) {
+                String waterFilterDefs = extractDefsFromSvg(waterSvg);
+                if (!waterFilterDefs.isEmpty()) {
+                    builder.append(waterFilterDefs);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to load water filter definitions", e);
+        }
+        
+        builder.append("</defs>");
     }
     
     /**
@@ -311,12 +328,20 @@ public class BattlemapImageController {
             return "";
         }
         
-        int defsEnd = svgContent.indexOf("</defs>", defsStart);
+        // Find the closing > of the <defs tag (to handle attributes)
+        int defsTagEnd = svgContent.indexOf(">", defsStart);
+        if (defsTagEnd == -1) {
+            return "";
+        }
+        
+        int defsEnd = svgContent.indexOf("</defs>", defsTagEnd);
         if (defsEnd == -1) {
             return "";
         }
         
-        return svgContent.substring(defsStart+6, defsEnd ); // +7 for "</defs>"
+        // Extract everything from <defs to </defs>, excluding the closing </defs> tag
+        // We'll wrap it in <defs> tags ourselves, so we extract the inner content
+        return svgContent.substring(defsTagEnd + 1, defsEnd).trim();
     }
     
     /**
@@ -591,18 +616,8 @@ public class BattlemapImageController {
     private String renderWaterLayer(boolean[] cellWater, int canvasWidth, int canvasHeight, int gridWidth, int gridHeight) {
         StringBuilder builder = new StringBuilder();
         
-        // Load water SVG and extract filter definition
-        String waterSvg = SVGUtil.getSvgFromFile("water");
-        if (waterSvg == null || waterSvg.isEmpty()) {
-            logger.warn("Water SVG not found, skipping water layer");
-            return "";
-        }
-        
-        // Extract filter definition from water SVG
-        String filterDefs = extractDefsFromSvg(waterSvg);
-        if (!filterDefs.isEmpty()) {
-            builder.append("<defs>").append(filterDefs).append("</defs>");
-        }
+        // Note: Water filter definition is now included in appendDefs() method
+        // so it's available in the main <defs> section of the SVG
         
         // Build a single path that combines all water cells
         final int CELL_SIZE = 32;
@@ -637,9 +652,10 @@ public class BattlemapImageController {
         }
         
         // Render single path with all water cells if any water exists
+        // Use a base color - the filter's color matrix will transform it to the correct water color
         if (hasWater) {
             builder.append(String.format(
-                "<path d='%s' fill='#4A90E2' filter='url(#waterFilter)' fill-opacity='0.6' fill-rule='evenodd'/>",
+                "<path d='%s' fill='#003f7f' filter='url(#waterFilter)' fill-opacity='0.5' fill-rule='evenodd'/>",
                 pathData.toString()
             ));
         }
