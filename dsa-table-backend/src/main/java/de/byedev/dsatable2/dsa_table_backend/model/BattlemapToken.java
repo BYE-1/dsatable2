@@ -39,6 +39,9 @@ public class BattlemapToken {
     @Column(name = "name")
     private String name;
 
+    @Column(name = "character_id")
+    private Long characterId;
+
     public BattlemapToken() {
     }
 
@@ -124,5 +127,13 @@ public class BattlemapToken {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public Long getCharacterId() {
+        return characterId;
+    }
+
+    public void setCharacterId(Long characterId) {
+        this.characterId = characterId;
     }
 }

@@ -118,13 +118,6 @@ public class SVGUtil {
     public static final String VISOR_OPENING = "<rect style='opacity:1;fill:$color;fill-opacity:1;stroke:#000000;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1' id='rect861-5-2' " +
             "width='48' height='6' x='16' y='42.5'/>";
 
-    
-    // Stone - irregular rounded shape
-    public static final String STONE = "<path d='M 25,50 C 20,45 15,42 10,45 C 8,50 10,55 15,58 C 20,62 25,60 30,58 C 35,55 38,50 35,45 C 32,42 28,45 25,50 Z' " +
-            "style='fill:$color;stroke:#000000;stroke-width:2;stroke-linecap:round;stroke-linejoin:round'/>" +
-            "<path d='M 20,48 C 22,46 25,47 27,49 C 25,51 22,50 20,48 Z' style='fill:$lightColor;stroke:none;opacity:0.6'/>";
-    
-
     public static String getSvg(String svg, Color color) {
         return getSvg(svg,toHex(color));
     }
@@ -142,29 +135,6 @@ public class SVGUtil {
         ClassPathResource resource = new ClassPathResource(resourcePath);
         
         try {
-            if (!resource.exists()) {
-                // Try alternative paths for case sensitivity issues
-                String[] alternatives = {
-                    "static/svg/" + filename + ".svg",  // Original case
-                    "static/SVG/" + filename.toLowerCase() + ".svg",  // Capitalized directory
-                    "static/SVG/" + filename + ".svg"   // Both capitalized
-                };
-                
-                boolean found = false;
-                for (String altPath : alternatives) {
-                    ClassPathResource altResource = new ClassPathResource(altPath);
-                    if (altResource.exists()) {
-                        resource = altResource;
-                        resourcePath = altPath;
-                        found = true;
-                        break;
-                    }
-                }
-                
-                if (!found) {
-                    throw new IOException("Resource does not exist at: " + resourcePath + " (and alternatives not found)");
-                }
-            }
             
             byte[] bytes = resource.getInputStream().readAllBytes();
             if (bytes.length == 0) {

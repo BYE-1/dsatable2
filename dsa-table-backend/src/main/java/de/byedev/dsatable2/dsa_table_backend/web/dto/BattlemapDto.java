@@ -39,6 +39,8 @@ public class BattlemapDto {
                         dto.setAvatarUrl(token.getAvatarUrl());
                         dto.setBorderColor(token.getBorderColor());
                         dto.setName(token.getName());
+                        dto.setCharacterId(token.getCharacterId());
+                        // playerName will be set by controller after mapping characterId
                         return dto;
                     })
                     .collect(Collectors.toList());

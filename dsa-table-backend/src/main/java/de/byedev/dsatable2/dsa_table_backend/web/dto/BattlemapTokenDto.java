@@ -16,6 +16,8 @@ public class BattlemapTokenDto {
     @JsonProperty("bc")
     private String borderColor;
     private String name;
+    private String playerName; // Used by frontend, mapped to characterId in backend
+    private Long characterId; // Used by backend, mapped from playerName
     
     // Environment object properties (alternative to avatarUrl for reconstruction)
     @JsonProperty("et")
@@ -106,6 +108,22 @@ public class BattlemapTokenDto {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getPlayerName() {
+        return playerName;
+    }
+
+    public void setPlayerName(String playerName) {
+        this.playerName = playerName;
+    }
+
+    public Long getCharacterId() {
+        return characterId;
+    }
+
+    public void setCharacterId(Long characterId) {
+        this.characterId = characterId;
     }
 
     public String getEnvType() {

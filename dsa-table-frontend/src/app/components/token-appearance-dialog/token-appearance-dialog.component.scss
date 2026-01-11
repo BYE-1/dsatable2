@@ -200,11 +200,17 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  
+  // Hide avatar editor's footer when used in token dialog (we have our own footer)
+  ::ng-deep .avatar-editor-footer {
+    display: none;
+  }
 }
 
 .token-appearance-dialog-footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
+  align-items: center;
   gap: 1rem;
   padding: 1rem 1.5rem;
   border-top: 2px dashed #d9d0c0;
@@ -212,6 +218,10 @@
   flex-shrink: 0;
   position: relative;
   z-index: 100;
+  
+  .btn-delete {
+    margin-right: auto;
+  }
 }
 
 .btn-cancel,

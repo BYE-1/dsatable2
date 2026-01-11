@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AvatarEditorComponent } from '../avatar-editor/avatar-editor.component';
@@ -25,6 +25,8 @@ export class TokenAppearanceDialogComponent {
   @Output() saved = new EventEmitter<TokenAppearanceConfig>();
   @Output() canceled = new EventEmitter<void>();
   @Output() deleted = new EventEmitter<void>();
+  
+  @ViewChild('avatarEditor') avatarEditor?: AvatarEditorComponent;
 
   tokenAppearanceMode: 'color' | 'avatar' = 'color';
   tokenColor: string = '#000000';
@@ -55,6 +57,7 @@ export class TokenAppearanceDialogComponent {
   }
 
   onAvatarSaved(result: { avatarUrl: string; borderColor?: string }): void {
+    // Emit saved event when avatar editor saves
     const config: TokenAppearanceConfig = {
       avatarUrl: result.avatarUrl,
       borderColor: result.borderColor || this.tokenBorderColor,
@@ -62,6 +65,14 @@ export class TokenAppearanceDialogComponent {
       name: this.tokenName || undefined
     };
     this.saved.emit(config);
+  }
+
+  onAvatarSaveClick(): void {
+    // Trigger the avatar editor's save method
+    // This will emit avatarSaved, which calls onAvatarSaved, which emits saved
+    if (this.avatarEditor && this.tokenAppearanceMode === 'avatar' && !this.isPlayerMode) {
+      this.avatarEditor.save();
+    }
   }
 
   onSaveClick(): void {

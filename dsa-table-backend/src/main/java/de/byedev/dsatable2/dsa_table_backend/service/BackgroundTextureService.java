@@ -111,9 +111,10 @@ public class BackgroundTextureService {
     
     /**
      * Get texture name for a given ID
+     * Default fallback is earth instead of "default"
      */
     public String getTextureName(int textureId) {
-        return textureIdToName.getOrDefault(textureId, "default");
+        return textureIdToName.getOrDefault(textureId, "earth");
     }
     
     /**

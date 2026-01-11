@@ -8,6 +8,30 @@
       <div class="control-section">
         <h4>Background</h4>
         
+        <!-- Random Map Generator -->
+        <div class="form-group">
+          <label for="map-type">Map Type</label>
+          <select
+            id="map-type"
+            [(ngModel)]="selectedMapType"
+            class="form-control"
+          >
+            <option value="forest">Forest</option>
+            <option value="beach">Beach</option>
+            <option value="town">Town</option>
+            <option value="desert">Desert</option>
+            <option value="cave">Cave</option>
+            <option value="plains">Plains</option>
+          </select>
+          <button
+            type="button"
+            (click)="generateRandomMap()"
+            class="btn btn-generate"
+            title="Generate a random map based on the selected map type"
+          >
+            🎲 Generate Random Map
+          </button>
+        </div>
         
         <div class="form-row">
           <div class="form-group form-group-inline">

@@ -69,6 +69,7 @@
       <!-- Avatar Mode -->
       <div *ngIf="tokenAppearanceMode === 'avatar' && !isPlayerMode" class="token-appearance-avatar-section">
         <app-avatar-editor
+          #avatarEditor
           [initialAvatarUrl]="token.avatarUrl"
           [showBorderColor]="true"
           [borderColor]="tokenBorderColor"
@@ -79,16 +80,13 @@
       </div>
     </div>
 
-    <!-- Delete button for avatar mode (shown separately since avatar editor has its own footer) -->
-    <div *ngIf="tokenAppearanceMode === 'avatar' && !isPlayerMode && canDelete" class="token-appearance-dialog-footer" (click)="$event.stopPropagation()">
-      <button type="button" class="btn-delete" (click)="onDeleteClick()">Delete Token</button>
-    </div>
-
-    <!-- Footer buttons shown for color mode or player mode (avatar mode has its own buttons) -->
-    <div *ngIf="tokenAppearanceMode === 'color' || isPlayerMode" class="token-appearance-dialog-footer" (click)="$event.stopPropagation()">
+    <!-- Footer buttons - all modes show Delete, Cancel, Save together -->
+    <div class="token-appearance-dialog-footer" (click)="$event.stopPropagation()">
       <button *ngIf="canDelete" type="button" class="btn-delete" (click)="onDeleteClick()">Delete</button>
-      <button type="button" class="btn-cancel" (click)="onCancelClick()">Cancel</button>
-      <button type="button" class="btn-save" (click)="onSaveClick()">Save</button>
+      <button *ngIf="tokenAppearanceMode === 'avatar' && !isPlayerMode" type="button" class="btn-cancel" (click)="onCancelClick()">Cancel</button>
+      <button *ngIf="tokenAppearanceMode === 'avatar' && !isPlayerMode" type="button" class="btn-save" (click)="onAvatarSaveClick()">Save</button>
+      <button *ngIf="tokenAppearanceMode === 'color' || isPlayerMode" type="button" class="btn-cancel" (click)="onCancelClick()">Cancel</button>
+      <button *ngIf="tokenAppearanceMode === 'color' || isPlayerMode" type="button" class="btn-save" (click)="onSaveClick()">Save</button>
     </div>
   </div>
 </div>

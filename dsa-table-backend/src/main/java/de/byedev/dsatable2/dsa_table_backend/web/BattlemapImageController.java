@@ -184,16 +184,16 @@ public class BattlemapImageController {
                         
                         String textureName = textureService.getTextureName(bgType);
                         
-                        if ("default".equals(textureName)) {
-                            // Default green background - render directly
+                        if ("default".equals(textureName) || "earth".equals(textureName)) {
+                            // Default or earth background - render directly
                             String color = getBackgroundColor(bgType);
                             builder.append("<rect x='").append(x).append("' y='").append(y)
                                     .append("' width='32' height='32' fill='").append(color).append("'/>");
                         } else {
-                            // Texture-based background - add to clip path
+                            // Texture-based background - add to clip path with squiggly edges
+                            String squigglyPath = generateSquigglyPath(x, y, 32, 32, col, row);
                             textureClipPaths.computeIfAbsent(bgType, k -> new StringBuilder())
-                                    .append("<rect x='").append(x).append("' y='").append(y)
-                                    .append("' width='32' height='32' />");
+                                    .append(squigglyPath);
                         }
                     }
                 }
@@ -244,10 +244,12 @@ public class BattlemapImageController {
             
             logger.debug("Rendered {} cell backgrounds with {} texture types", cellBackgrounds.size(), textureClipPaths.size());
         } else {
-            // Fallback: solid default green background
+            // Fallback: solid default earth background
+            Integer earthId = textureService.getTextureId("earth");
+            String earthColor = earthId != null ? getBackgroundColor(earthId) : "#8B4513"; // Earth brown
             builder.append("<rect x='0' y='0' width='").append(width).append("' height='").append(height)
-                    .append("' fill='#228B22'/>");
-            logger.debug("No cell backgrounds provided, using default green background");
+                    .append("' fill='").append(earthColor).append("'/>");
+            logger.debug("No cell backgrounds provided, using default earth background");
         }
 
         // Add water layer above backgrounds but below tokens
@@ -444,7 +446,74 @@ public class BattlemapImageController {
         
         return " " + attributes.trim() + " ";
     }
-
+    
+    /**
+     * Generate a squiggly/uneven path for a cell to create organic-looking edges
+     * Uses pseudo-random variations based on cell position for consistency
+     * Path extends beyond cell boundaries to prevent gaps
+     */
+    private String generateSquigglyPath(int x, int y, int width, int height, int col, int row) {
+        // Use cell position as seed for pseudo-randomness (ensures same path for same cell)
+        double seed = col * 137.5 + row * 97.3; // Use irrational multipliers for better distribution
+        
+        // Smaller squiggles for subtle organic look
+        double waveAmplitude = 1.2;
+        int numPoints = 6; // Points per side (fewer points for smoother curves)
+        
+        // Extend path by overlap amount to prevent gaps (each cell extends 2px on each side)
+        int overlap = 2;
+        int extendedX = x - overlap;
+        int extendedY = y - overlap;
+        int extendedWidth = width + overlap * 2;
+        int extendedHeight = height + overlap * 2;
+        
+        StringBuilder path = new StringBuilder();
+        path.append("<path d='");
+        
+        // Generate points for each edge with wavy variations
+        // Start from top-left, go clockwise
+        // Use the extended boundaries as the base for squiggles
+        
+        // Top edge
+        path.append("M ").append(extendedX).append(",").append(extendedY);
+        for (int i = 1; i <= numPoints; i++) {
+            double t = (double)i / numPoints;
+            double offset = waveAmplitude * Math.sin(seed + t * Math.PI * 2);
+            double px = extendedX + t * extendedWidth;
+            double py = extendedY + offset;
+            path.append(" L ").append(px).append(",").append(py);
+        }
+        
+        // Right edge
+        for (int i = 1; i <= numPoints; i++) {
+            double t = (double)i / numPoints;
+            double offset = waveAmplitude * Math.sin(seed + 10.7 + t * Math.PI * 2);
+            double px = extendedX + extendedWidth + offset;
+            double py = extendedY + t * extendedHeight;
+            path.append(" L ").append(px).append(",").append(py);
+        }
+        
+        // Bottom edge (reverse direction)
+        for (int i = numPoints - 1; i >= 0; i--) {
+            double t = (double)i / numPoints;
+            double offset = waveAmplitude * Math.sin(seed + 20.3 + t * Math.PI * 2);
+            double px = extendedX + t * extendedWidth;
+            double py = extendedY + extendedHeight + offset;
+            path.append(" L ").append(px).append(",").append(py);
+        }
+        
+        // Left edge (reverse direction)
+        for (int i = numPoints - 1; i >= 0; i--) {
+            double t = (double)i / numPoints;
+            double offset = waveAmplitude * Math.sin(seed + 30.1 + t * Math.PI * 2);
+            double px = extendedX + offset;
+            double py = extendedY + t * extendedHeight;
+            path.append(" L ").append(px).append(",").append(py);
+        }
+        
+        path.append(" Z'/>"); // Close the path
+        return path.toString();
+    }
 
     private String addToken(BattlemapTokenDto token, String baseUrl) {
         if (token.getX() == null || token.getY() == null) {
@@ -600,12 +669,12 @@ public class BattlemapImageController {
         }
         // Fallback to default colors for legacy types
         switch (bgType) {
-            case 0: return "#228B22"; // Default green
+            case 0: return "#8B4513"; // Default earth (brown)
             case 1: return "#90EE90"; // Light green (grass)
             case 2: return "#8B4513"; // Brown (earth)
             case 3: return "#696969"; // Dim gray (rock)
             case 4: return "#F4A460"; // Sandy brown (sand)
-            default: return "#228B22"; // Default green
+            default: return "#8B4513"; // Default earth (brown)
         }
     }
     

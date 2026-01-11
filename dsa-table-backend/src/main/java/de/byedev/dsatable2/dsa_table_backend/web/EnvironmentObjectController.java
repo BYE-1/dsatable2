@@ -160,14 +160,7 @@ public class EnvironmentObjectController {
     }
 
     private String addStone(String color) {
-        Color baseColor = parseColor(color, STONE_COLOR_DEFAULT);
-        Color lightColor = brighten(baseColor, 0.2f);
-        
-        String svg = SVGUtil.STONE;
-        svg = SVGUtil.getSvg(svg, SVGUtil.toHex(baseColor));
-        svg = svg.replace("$lightColor", SVGUtil.toHex(lightColor));
-        
-        return svg;
+        return SVGUtil.getSvgFromFile("rock");
     }
 
     private String addHouse() {

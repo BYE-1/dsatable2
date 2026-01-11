@@ -62,14 +62,14 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
   
   showTokenNames: boolean = false;
   
-  tokens: Array<{ id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string }> = [];
+  tokens: Array<{ id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; playerName?: string; color?: string; borderColor?: string; name?: string }> = [];
   private nextTokenId: number = 1;
   
   pendingTokenConfig: { color?: string; avatarUrl?: string; borderColor?: string; name?: string } | null = null;
   
   showTokenAppearanceDialog: boolean = false;
-  editingToken: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string } | null = null;
-  private playerCharacterId: number | null = null;
+  editingToken: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; playerName?: string; color?: string; borderColor?: string; name?: string } | null = null;
+  private playerCharacterName: string | null = null;
   isPlayerEditingOwnToken: boolean = false;
   
   isDraggingToken: boolean = false;
@@ -157,7 +157,7 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
     this.gameSessionService.getMyCharacter(this.sessionId).subscribe({
       next: (character) => {
         if (character && !this.isGameMaster) {
-          this.playerCharacterId = character.id || null;
+          this.playerCharacterName = character.name || null;
         }
       },
       error: (error) => {
@@ -237,52 +237,78 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
       const existingTokensMap = new Map(this.tokens.map(t => [t.id, t]));
       const mergedTokens = newTokens.map(newToken => {
         const existing = existingTokensMap.get(newToken.id);
-        if (existing && existing.avatarUrl && !newToken.avatarUrl) {
+        if (existing) {
           // Preserve avatarUrl from existing token if backend doesn't have it
-          newToken.avatarUrl = existing.avatarUrl;
-        }
-        if (existing && existing.characterId && !newToken.characterId) {
-          // Preserve characterId from existing token
-          newToken.characterId = existing.characterId;
+          if (existing.avatarUrl && !newToken.avatarUrl) {
+            newToken.avatarUrl = existing.avatarUrl;
+          }
+          // Preserve playerName from existing token if backend doesn't have it
+          if (existing.playerName && !newToken.playerName) {
+            newToken.playerName = existing.playerName;
+          }
         }
         return newToken;
       });
       
+      // Use tokens from backend only - fully synchronized
       this.tokens = mergedTokens;
       this.nextTokenId = Math.max(...this.tokens.map(t => t.id), 0) + 1;
       this.loadTokenAvatars();
     } else {
+      // Backend has no tokens - clear local tokens too
       this.tokens = [];
+      this.nextTokenId = 1;
     }
     
     this.lastSavedTokenHash = tokenHash;
   }
   
-  private mapDtoToToken(dto: BattlemapToken): { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string } {
+  private mapDtoToToken(dto: BattlemapToken): { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; playerName?: string; color?: string; borderColor?: string; name?: string } {
     // Map from backend JSON property names (tid, gm, url, bc) to internal names
     // Backend uses shortened property names via @JsonProperty annotations
     const tokenId = dto.tokenId ?? dto.tid ?? dto.id;
     const isGmOnly = dto.isGmOnly ?? dto.gm ?? false;
-    const avatarUrl = dto.avatarUrl ?? dto.url;
+    let avatarUrl = dto.avatarUrl ?? dto.url;
     const borderColor = dto.borderColor ?? dto.bc;
+    
+    // If no avatarUrl but has environment object properties (et, ec, es), generate the URL
+    if (!avatarUrl && dto.et) {
+      avatarUrl = this.getEnvironmentObjectUrl(dto.et, dto.ec, dto.es);
+    }
     
     if (!tokenId && tokenId !== 0) {
       console.warn('Token missing tokenId/tid:', dto);
     }
     
-    // tokenId is used as both the token identifier and character ID when it's a player token
-    // Set characterId to tokenId so we can match it with characters later
+    // Extract playerName from dto (now in backend model)
+    const playerName = dto.playerName;
+    
     return {
       id: tokenId ?? 0, // Fallback to 0 if undefined, but log warning
       x: dto.x ?? 0,
       y: dto.y ?? 0,
       isGmOnly: isGmOnly,
-      characterId: tokenId, // Preserve tokenId as characterId for player tokens
+      playerName: playerName, // Will be "npc" for NPC tokens, or character name for player tokens
       avatarUrl: avatarUrl,
       color: dto.color,
       borderColor: borderColor,
       name: dto.name
     };
+  }
+
+  /**
+   * Generate environment object URL from properties
+   */
+  private getEnvironmentObjectUrl(envType: string, envColor?: string, envSize?: number): string {
+    const params = new URLSearchParams();
+    params.set('type', envType);
+    if (envColor) {
+      params.set('color', envColor);
+    }
+    if (envSize) {
+      params.set('size', envSize.toString());
+    }
+    return `${environment.apiUrl}/env-object?${params.toString()}`;
   }
   
   private updateFogOfWar(battlemap: Battlemap): void {
@@ -338,8 +364,15 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
       const tokenHash = this.getTokenHash(battlemap.tokens || []);
       
       this.gameSessionService.updateBattlemap(this.sessionId!, battlemap).subscribe({
-        next: () => {
-          this.lastSavedTokenHash = tokenHash;
+        next: (savedBattlemap: Battlemap) => {
+          // After save completes, reload from backend to ensure full synchronization
+          // This ensures tokens are always in sync with backend
+          if (savedBattlemap) {
+            this.updateTokensFromBattlemap(savedBattlemap);
+          } else {
+            // If no response, just update the hash to prevent unnecessary reloads
+            this.lastSavedTokenHash = tokenHash;
+          }
           this.isSaving = false;
         },
         error: (error) => {
@@ -379,6 +412,10 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
     });
     
     viewport.addEventListener('mouseup', (e: MouseEvent) => this.onMouseUp(e));
+    
+    viewport.addEventListener('mouseenter', (e: MouseEvent) => {
+      this.onMouseEnter(e);
+    });
     
     viewport.addEventListener('mouseleave', (e: MouseEvent) => {
       this.onMouseLeave(e);
@@ -438,10 +475,10 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
     }
   }
   
-  private mapTokenToDto(token: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string }): BattlemapToken {
+  private mapTokenToDto(token: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; playerName?: string; color?: string; borderColor?: string; name?: string }): BattlemapToken {
     // Map to backend JSON format using shortened property names
     // Backend uses @JsonProperty annotations: tid, gm, url, bc
-    const dto: BattlemapToken = {
+    const dto: any = {
       tid: token.id, // Backend expects "tid" in JSON
       x: token.x,
       y: token.y,
@@ -460,8 +497,11 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
     if (token.name !== undefined) {
       dto.name = token.name;
     }
+    if (token.playerName !== undefined) {
+      dto.playerName = token.playerName; // Add playerName to DTO
+    }
     
-    return dto;
+    return dto as BattlemapToken;
   }
   
   private exitTokenPlacementMode(): void {
@@ -603,6 +643,17 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
     }
   }
   
+  onMouseEnter(event: MouseEvent): void {
+    // Update cursor when re-entering viewport based on current mode
+    if (this.isFogOfWarMode) {
+      this.updateFogOfWarCursor();
+    } else if (this.isAddingToken) {
+      this.setViewportCursor('crosshair');
+    } else if (!this.isDraggingToken) {
+      this.setViewportCursor('grab');
+    }
+  }
+  
   onMouseLeave(event: MouseEvent): void {
     this.isPanning = false;
     
@@ -614,6 +665,7 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
       this.stopFogPainting();
     }
     
+    // Reset cursor when leaving viewport
     this.setViewportCursor('grab');
   }
   
@@ -735,6 +787,7 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
       x: snappedX,
       y: snappedY,
       isGmOnly: false,
+      playerName: 'npc', // NPC tokens use "npc"
       color: this.pendingTokenConfig.color,
       avatarUrl: this.pendingTokenConfig.avatarUrl,
       borderColor: this.pendingTokenConfig.borderColor,
@@ -751,6 +804,32 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
   
   // Menu actions
   onAddToken(): void {
+    // If already in token placement mode, cancel it
+    if (this.isAddingToken) {
+      this.exitTokenPlacementMode();
+      this.pendingTokenConfig = null;
+      // Close dialog if open
+      if (this.showTokenAppearanceDialog) {
+        this.closeTokenAppearanceDialog();
+      }
+      return;
+    }
+    
+    // Close any open dialogs first
+    if (this.showTokenAppearanceDialog) {
+      this.closeTokenAppearanceDialog();
+    }
+    if (this.showBackgroundImageDialog) {
+      this.showBackgroundImageDialog = false;
+    }
+    
+    // Clear any existing state
+    this.editingToken = null;
+    this.pendingTokenConfig = null;
+    
+    // New tokens via menu are always non-player tokens, so use full edit mode
+    this.isPlayerEditingOwnToken = false;
+    
     // Open the token appearance dialog first to configure the token
     const tempTokenId = this.nextTokenId++;
     const tempToken = {
@@ -759,9 +838,6 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
       y: 0, // Will be set when placed
       isGmOnly: false
     };
-    
-    // Clear any pending config
-    this.pendingTokenConfig = null;
     
     // Open the appearance dialog
     this.openTokenAppearanceDialog(tempToken);
@@ -829,12 +905,49 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
   }
   
   /**
+   * Hide all fog immediately (set all cells to fogged)
+   */
+  hideAllFog(): void {
+    if (!this.mapViewport || !this.mapCanvas) return;
+    
+    // Clear all revealed cells (all fog everywhere)
+    this.fogOfWarService.setFogAreas([]);
+    this.showFogMenu = false;
+    this.saveBattlemap();
+  }
+  
+  /**
+   * Reveal all fog immediately (clear all fog)
+   */
+  revealAllFog(): void {
+    if (!this.mapViewport || !this.mapCanvas) return;
+    
+    const gridCellWidth = this.gridService.getGridCellWidth(this.baseCanvasWidth);
+    const gridCellHeight = this.gridService.getGridCellHeight(this.baseCanvasHeight);
+    
+    const maxGridX = Math.floor(this.baseCanvasWidth / gridCellWidth);
+    const maxGridY = Math.floor(this.baseCanvasHeight / gridCellHeight);
+    
+    // Reveal all cells (no fog anywhere)
+    const allCells: Array<{ gridX: number; gridY: number }> = [];
+    for (let x = 0; x < maxGridX; x++) {
+      for (let y = 0; y < maxGridY; y++) {
+        allCells.push({ gridX: x, gridY: y });
+      }
+    }
+    this.fogOfWarService.setFogAreas(allCells);
+    this.showFogMenu = false;
+    this.saveBattlemap();
+  }
+  
+  /**
    * Update cursor based on fog of war mode
    */
   private updateFogOfWarCursor(): void {
     if (!this.mapViewport) return;
     
     if (this.isFogOfWarMode) {
+      // Use crosshair for add, not-allowed for remove
       this.setViewportCursor(this.fogMode === 'add' ? 'crosshair' : 'not-allowed');
       this.mapViewport.nativeElement.classList.add('fog-of-war-mode');
     } else {
@@ -858,7 +971,7 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
     this.showFogMenu = false;
     
     if (this.isFogOfWarMode) {
-      this.setViewportCursor('crosshair');
+      this.updateFogOfWarCursor();
     }
   }
   
@@ -867,8 +980,8 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
       return 'Fog of War (Right-click to choose mode)';
     }
     return this.fogMode === 'add' 
-      ? 'Add Fog Mode - Click to add fog (Right-click to change)' 
-      : 'Remove Fog Mode - Click to reveal areas (Right-click to change)';
+      ? 'Add Fog Mode - Click and drag to add fog (Right-click to change)' 
+      : 'Remove Fog Mode - Click and drag to reveal areas (Right-click to change)';
   }
   
   
@@ -876,20 +989,35 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
     event.preventDefault();
     event.stopPropagation();
     
+    // Don't open dialog if in token placement mode
+    if (this.isAddingToken) return;
+    
     const token = this.tokens.find(t => t.id === tokenId);
     if (!token) return;
     
+    // Close any other open dialogs first
+    if (this.showBackgroundImageDialog) {
+      this.showBackgroundImageDialog = false;
+    }
+    
+    // Determine dialog mode:
+    // Player mode (simple) = tokens with playerName !== "npc" (player tokens)
+    // Full edit mode = tokens with playerName === "npc" (non-player tokens)
     if (this.isGameMaster) {
-      this.isPlayerEditingOwnToken = !!token.characterId;
+      // GM: 
+      // - Player tokens (playerName !== "npc") = simple dialog
+      // - Non-player tokens (playerName === "npc") = full edit dialog with avatar editing
+      this.isPlayerEditingOwnToken = token.playerName !== undefined && token.playerName !== 'npc';
       this.openTokenAppearanceDialog(token);
     } else {
-      if (!token.characterId || token.characterId !== this.playerCharacterId) return;
+      // Player: Can only edit their own token, and only in player mode
+      if (!token.playerName || token.playerName === 'npc' || token.playerName !== this.playerCharacterName) return;
       this.isPlayerEditingOwnToken = true;
       this.openTokenAppearanceDialog(token);
     }
   }
   
-  openTokenAppearanceDialog(token: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string }): void {
+  openTokenAppearanceDialog(token: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; playerName?: string; color?: string; borderColor?: string; name?: string }): void {
     this.editingToken = { ...token };
     this.showTokenAppearanceDialog = true;
   }
@@ -924,7 +1052,7 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
       token.borderColor = config.borderColor;
       token.avatarUrl = config.avatarUrl;
       token.color = config.color;
-      if (config.name !== undefined && !token.characterId) {
+      if (config.name !== undefined && token.playerName === 'npc') {
         token.name = config.name;
       }
     }
@@ -1121,11 +1249,7 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
   }
   
   private updateOrCreateTokenFromDrop(characterData: { characterId: number; characterName: string; avatarUrl: string }, position: { x: number; y: number }): void {
-    // Check for existing token by both id and characterId to handle tokens loaded from backend
-    const existingToken = this.tokens.find(t => 
-      t.id === characterData.characterId || 
-      t.characterId === characterData.characterId
-    );
+    const existingToken = this.tokens.find(t => t.playerName === characterData.characterName && t.playerName !== 'npc');
     
     if (existingToken) {
       this.updateExistingTokenFromDrop(existingToken, characterData, position);
@@ -1134,28 +1258,26 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
     }
   }
   
-  private updateExistingTokenFromDrop(token: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; characterId?: number; color?: string; borderColor?: string; name?: string }, characterData: { characterId: number; characterName: string; avatarUrl: string }, position: { x: number; y: number }): void {
+  private updateExistingTokenFromDrop(token: { id: number; x: number; y: number; isGmOnly: boolean; avatarUrl?: string; playerName?: string; color?: string; borderColor?: string; name?: string }, characterData: { characterId: number; characterName: string; avatarUrl: string }, position: { x: number; y: number }): void {
     token.x = position.x;
     token.y = position.y;
     token.avatarUrl = characterData.avatarUrl;
-    token.characterId = characterData.characterId;
+    token.playerName = characterData.characterName;
     token.name = characterData.characterName;
   }
   
   private createTokenFromDrop(characterData: { characterId: number; characterName: string; avatarUrl: string }, position: { x: number; y: number }): void {
+    // Generate a unique token ID (don't use characterId as token ID)
+    const tokenId = this.nextTokenId++;
     this.tokens.push({
-      id: characterData.characterId,
+      id: tokenId,
       x: position.x,
       y: position.y,
       isGmOnly: false,
-      characterId: characterData.characterId,
+      playerName: characterData.characterName,
       avatarUrl: characterData.avatarUrl,
       name: characterData.characterName
     });
-    
-    if (characterData.characterId >= this.nextTokenId) {
-      this.nextTokenId = characterData.characterId + 1;
-    }
   }
 
   loadTokenAvatars(): void {
@@ -1172,33 +1294,31 @@ export class BattlemapComponent implements AfterViewInit, OnDestroy, OnChanges {
     });
   }
   
-  private buildCharacterMaps(characters: Character[]): { characterMap: Map<number, Character>; avatarMap: Map<number, string> } {
-    const characterMap = new Map<number, Character>();
-    const avatarMap = new Map<number, string>();
+  private buildCharacterMaps(characters: Character[]): { characterMap: Map<string, Character>; avatarMap: Map<string, string> } {
+    const characterMap = new Map<string, Character>();
+    const avatarMap = new Map<string, string>();
     
     characters.forEach(char => {
-      if (char.id) {
-        characterMap.set(char.id, char);
-        avatarMap.set(char.id, this.getAvatarUrl(char));
+      if (char.name) {
+        characterMap.set(char.name, char);
+        avatarMap.set(char.name, this.getAvatarUrl(char));
       }
     });
     
     return { characterMap, avatarMap };
   }
   
-  private updateTokensWithCharacterData(characterMap: Map<number, Character>, avatarMap: Map<number, string>): void {
+  private updateTokensWithCharacterData(characterMap: Map<string, Character>, avatarMap: Map<string, string>): void {
     this.tokens.forEach(token => {
-      // Check by both id and characterId to handle all cases
-      const characterId = token.characterId || token.id;
-      if (characterMap.has(characterId)) {
-        token.characterId = characterId;
-        const character = characterMap.get(characterId);
+      // Only update character-related data if token has a playerName that matches a character
+      // NPC tokens have playerName === "npc" and should be skipped
+      if (token.playerName && token.playerName !== 'npc' && characterMap.has(token.playerName)) {
+        // Token has a player name - it's a player token
+        const character = characterMap.get(token.playerName);
         if (character && !token.name) {
           token.name = character.name;
         }
-        // Always update avatarUrl from character for character tokens
-        // This ensures tokens always have the correct avatar, even after polling updates
-        const avatarUrl = avatarMap.get(characterId);
+        const avatarUrl = avatarMap.get(token.playerName);
         if (avatarUrl) {
           token.avatarUrl = avatarUrl;
         }

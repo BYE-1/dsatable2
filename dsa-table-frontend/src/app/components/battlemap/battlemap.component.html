@@ -44,33 +44,57 @@
           (click)="onToggleFogOfWar()"
           (contextmenu)="onFogButtonRightClick($event)"
           [title]="getFogButtonTitle()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"></path>
-            <path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"></path>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>
+            <path d="M12 13v2"></path>
           </svg>
         </button>
         <div class="fog-menu" *ngIf="showFogMenu" (click)="$event.stopPropagation()">
-          <button 
-            class="fog-menu-item" 
-            type="button"
-            [class.active]="fogMode === 'add'"
-            (click)="setFogMode('add')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            <span>Add Fog</span>
-          </button>
-          <button 
-            class="fog-menu-item" 
-            type="button"
-            [class.active]="fogMode === 'remove'"
-            (click)="setFogMode('remove')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            <span>Remove Fog</span>
-          </button>
+          <div class="fog-menu-section">
+            <button 
+              class="fog-menu-item" 
+              type="button"
+              [class.active]="fogMode === 'add'"
+              (click)="setFogMode('add')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Add Fog</span>
+            </button>
+            <button 
+              class="fog-menu-item" 
+              type="button"
+              [class.active]="fogMode === 'remove'"
+              (click)="setFogMode('remove')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Remove Fog</span>
+            </button>
+          </div>
+          <div class="fog-menu-divider"></div>
+          <div class="fog-menu-section">
+            <button 
+              class="fog-menu-item" 
+              type="button"
+              (click)="hideAllFog()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"></path>
+              </svg>
+              <span>Hide All</span>
+            </button>
+            <button 
+              class="fog-menu-item" 
+              type="button"
+              (click)="revealAllFog()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <span>Reveal All</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

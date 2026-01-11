@@ -12,6 +12,7 @@ export interface BattlemapToken {
   bc?: string; // JSON property name from backend (@JsonProperty("bc"))
   borderColor?: string; // Mapped from bc for internal use
   name?: string;
+  playerName?: string; // Player name ("npc" for non-player tokens)
   // Environment object properties
   et?: string; // envType
   ec?: string; // envColor

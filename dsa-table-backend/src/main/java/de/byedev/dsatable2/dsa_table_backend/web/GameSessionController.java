@@ -159,7 +159,7 @@ public class GameSessionController {
 
     @PostMapping("/{id}/join")
     @Transactional
-    @CacheEvict(value = "gameSessions", allEntries = true)
+    @CacheEvict(value = {"gameSessions", "characters"}, allEntries = true)
     public ResponseEntity<GameSessionDto> joinSession(
             @PathVariable Long id,
             @RequestParam Long characterId,
@@ -261,7 +261,10 @@ public class GameSessionController {
                     return battlemapRepository.save(newBattlemap);
                 });
         
-        return ResponseEntity.ok(new BattlemapDto(battlemap));
+        BattlemapDto dto = new BattlemapDto(battlemap);
+        // Map characterId to playerName for all tokens
+        mapCharacterIdToPlayerName(dto, id);
+        return ResponseEntity.ok(dto);
     }
 
     @PutMapping("/{id}/battlemap")
@@ -296,6 +299,8 @@ public class GameSessionController {
                         battlemap.getTokens().clear();
                         
                         // Add new tokens
+                        // Load all characters for this session to map playerName to characterId
+                        List<Character> sessionCharacters = characterRepository.findBySessionId(id);
                         for (BattlemapTokenDto tokenDto : battlemapDto.getTokens()) {
                             BattlemapToken token = new BattlemapToken(
                                     battlemap,
@@ -308,6 +313,21 @@ public class GameSessionController {
                             token.setAvatarUrl(tokenDto.getAvatarUrl());
                             token.setBorderColor(tokenDto.getBorderColor());
                             token.setName(tokenDto.getName());
+                            
+                            // Map playerName (from frontend) to characterId (for backend storage)
+                            // "npc" means non-player token (characterId = null)
+                            if (tokenDto.getPlayerName() != null && !tokenDto.getPlayerName().equals("npc")) {
+                                // Find character by name in this session
+                                Character character = sessionCharacters.stream()
+                                        .filter(c -> tokenDto.getPlayerName().equals(c.getName()))
+                                        .findFirst()
+                                        .orElse(null);
+                                if (character != null && character.getId() != null) {
+                                    token.setCharacterId(character.getId());
+                                }
+                            }
+                            // If playerName is null or "npc", characterId remains null (NPC token)
+                            
                             battlemap.getTokens().add(token);
                         }
                     }
@@ -328,7 +348,10 @@ public class GameSessionController {
                     }
 
                     Battlemap saved = battlemapRepository.save(battlemap);
-                    return ResponseEntity.ok(new BattlemapDto(saved));
+                    BattlemapDto responseDto = new BattlemapDto(saved);
+                    // Map characterId to playerName for all tokens
+                    mapCharacterIdToPlayerName(responseDto, id);
+                    return ResponseEntity.ok(responseDto);
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -373,6 +396,35 @@ public class GameSessionController {
         }
 
         return ResponseEntity.ok(myCharacter);
+    }
+    
+    /**
+     * Map characterId to playerName for all tokens in the DTO
+     */
+    private void mapCharacterIdToPlayerName(BattlemapDto dto, Long sessionId) {
+        if (dto.getTokens() == null || dto.getTokens().isEmpty()) {
+            return;
+        }
+        
+        // Load all characters for this session to create ID -> name mapping
+        List<Character> sessionCharacters = characterRepository.findBySessionId(sessionId);
+        java.util.Map<Long, String> characterIdToName = sessionCharacters.stream()
+                .filter(c -> c.getId() != null)
+                .collect(java.util.stream.Collectors.toMap(Character::getId, Character::getName));
+        
+        // Map characterId to playerName for each token
+        for (BattlemapTokenDto tokenDto : dto.getTokens()) {
+            if (tokenDto.getCharacterId() != null) {
+                // Token has characterId - look up character name
+                String playerName = characterIdToName.get(tokenDto.getCharacterId());
+                if (playerName != null) {
+                    tokenDto.setPlayerName(playerName);
+                }
+            } else {
+                // Token has no characterId - it's an NPC token
+                tokenDto.setPlayerName("npc");
+            }
+        }
     }
 }
 

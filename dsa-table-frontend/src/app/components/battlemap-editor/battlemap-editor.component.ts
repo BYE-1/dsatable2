@@ -47,23 +47,25 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
   environmentObjects: EnvironmentObject[] = [];
   tokens: BattlemapToken[] = [];
 
-  // Background type IDs (matching backend)
-  // 0 = default/green, 1 = grass, 2 = earth, 3 = rock, 4 = sand
-  readonly BACKGROUND_TYPES = {
-    DEFAULT: 0,
-    GRASS: 1,
-    EARTH: 2,
-    ROCK: 3,
-    SAND: 4
-  };
-  
   // Available background textures from backend
   availableBackgrounds: BackgroundTextureInfo[] = [];
   backgroundMap: Map<number, BackgroundTextureInfo> = new Map();
+  backgroundNameMap: Map<string, number> = new Map(); // Map name to ID
   
-  // Expose BACKGROUND_TYPES to template
-  get BackgroundTypes() {
-    return this.BACKGROUND_TYPES;
+  // Helper methods to get background IDs by name (with fallback to IDs if not loaded)
+  private getBackgroundIdByName(name: string): number | null {
+    return this.backgroundNameMap.get(name.toLowerCase()) ?? null;
+  }
+
+  private getDefaultBackgroundId(): number {
+    // Try to find 'default' background, otherwise use first available
+    const defaultId = this.getBackgroundIdByName('default');
+    if (defaultId !== null) return defaultId;
+    if (this.availableBackgrounds.length > 0) {
+      return this.availableBackgrounds[0].id;
+    }
+    // Fallback to 0 if nothing loaded yet
+    return 0;
   }
   
   // Get all available background IDs (including dynamic ones)
@@ -98,8 +100,11 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
   showGrid: boolean = true;
 
   // Brush tool for painting backgrounds
-  selectedBackgroundType: number = this.BACKGROUND_TYPES.DEFAULT;
+  selectedBackgroundType: number = 0; // Will be updated when backgrounds load
   isBrushActive: boolean = false;
+
+  // Random map generation
+  selectedMapType: string = 'forest';
   private isPainting: boolean = false;
   showBrushMenu: boolean = false;
   brushMenuPosition: { x: number; y: number } = { x: 0, y: 0 };
@@ -151,8 +156,8 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
       if (this.initialData.cellBackgrounds && this.initialData.cellBackgrounds.length > 0) {
         this.cellBackgrounds = [...this.initialData.cellBackgrounds];
       } else {
-        // Initialize all cells to default (0 = green)
-        this.cellBackgrounds = new Array(this.gridWidth * this.gridHeight).fill(this.BACKGROUND_TYPES.DEFAULT);
+        // Initialize all cells to default
+        this.cellBackgrounds = new Array(this.gridWidth * this.gridHeight).fill(this.getDefaultBackgroundId());
       }
       
       // Handle cell water - initialize if not present
@@ -174,7 +179,7 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
       }
     } else {
       // Initialize with default backgrounds
-      this.cellBackgrounds = new Array(this.gridWidth * this.gridHeight).fill(this.BACKGROUND_TYPES.DEFAULT);
+      this.cellBackgrounds = new Array(this.gridWidth * this.gridHeight).fill(this.getDefaultBackgroundId());
       // Initialize with no water
       this.cellWater = new Array(this.gridWidth * this.gridHeight).fill(false);
     }
@@ -184,14 +189,18 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
     this.http.get<BackgroundTextureInfo[]>(`${environment.apiUrl}/battlemap-image/backgrounds`).subscribe({
       next: (backgrounds) => {
         this.availableBackgrounds = backgrounds;
-        // Create a map for quick lookup
+        // Create maps for quick lookup by ID and name
         this.backgroundMap.clear();
+        this.backgroundNameMap.clear();
         backgrounds.forEach(bg => {
           this.backgroundMap.set(bg.id, bg);
+          if (bg.name) {
+            this.backgroundNameMap.set(bg.name.toLowerCase(), bg.id);
+          }
         });
         // Ensure default is selected if available
         if (this.availableBackgrounds.length > 0 && !this.backgroundMap.has(this.selectedBackgroundType)) {
-          this.selectedBackgroundType = this.availableBackgrounds[0].id;
+          this.selectedBackgroundType = this.getDefaultBackgroundId();
         }
       },
       error: (err) => {
@@ -204,8 +213,13 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
           { id: 3, name: 'stone', displayName: 'Rock', color: '#696969' },
           { id: 4, name: 'sand', displayName: 'Sand', color: '#F4A460' }
         ];
+        this.backgroundMap.clear();
+        this.backgroundNameMap.clear();
         this.availableBackgrounds.forEach(bg => {
           this.backgroundMap.set(bg.id, bg);
+          if (bg.name) {
+            this.backgroundNameMap.set(bg.name.toLowerCase(), bg.id);
+          }
         });
       }
     });
@@ -250,7 +264,7 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
     
     if (newSize > oldSize) {
       // Grid grew - fill new cells with default
-      this.cellBackgrounds = [...this.cellBackgrounds, ...new Array(newSize - oldSize).fill(this.BACKGROUND_TYPES.DEFAULT)];
+      this.cellBackgrounds = [...this.cellBackgrounds, ...new Array(newSize - oldSize).fill(this.getDefaultBackgroundId())];
       // Also resize cellWater array
       if (this.cellWater.length > 0) {
         this.cellWater = [...this.cellWater, ...new Array(newSize - oldSize).fill(false)];
@@ -537,15 +551,8 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
     if (bgInfo) {
       return bgInfo.displayName;
     }
-    // Fallback to hardcoded names for backward compatibility
-    switch (bgType) {
-      case this.BACKGROUND_TYPES.DEFAULT: return 'Default';
-      case this.BACKGROUND_TYPES.GRASS: return 'Grass';
-      case this.BACKGROUND_TYPES.EARTH: return 'Earth';
-      case this.BACKGROUND_TYPES.ROCK: return 'Rock';
-      case this.BACKGROUND_TYPES.SAND: return 'Sand';
-      default: return `Background ${bgType}`;
-    }
+    // Fallback if not found
+    return `Background ${bgType}`;
   }
 
   getBackgroundTypeColor(bgType: number): string {
@@ -553,15 +560,8 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
     if (bgInfo) {
       return bgInfo.color;
     }
-    // Fallback to hardcoded colors for backward compatibility
-    switch (bgType) {
-      case this.BACKGROUND_TYPES.DEFAULT: return '#228B22'; // Green
-      case this.BACKGROUND_TYPES.GRASS: return '#90EE90'; // Light green
-      case this.BACKGROUND_TYPES.EARTH: return '#8B4513'; // Brown
-      case this.BACKGROUND_TYPES.ROCK: return '#696969'; // Dim gray
-      case this.BACKGROUND_TYPES.SAND: return '#F4A460'; // Sandy brown
-      default: return '#808080'; // Gray fallback
-    }
+    // Fallback if not found
+    return '#808080'; // Gray fallback
   }
 
   // Convert mouse event to grid cell coordinates
@@ -583,47 +583,43 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
       return null;
     }
 
-    // Get SVG's intrinsic dimensions from width/height attributes
-    const svgWidth = parseFloat(svg.getAttribute('width') || String(this.gridWidth * this.CELL_SIZE));
-    const svgHeight = parseFloat(svg.getAttribute('height') || String(this.gridHeight * this.CELL_SIZE));
-    
-    if (svgWidth === 0 || svgHeight === 0) {
-      console.warn('SVG intrinsic dimensions are zero');
-      return null;
+    // Use SVG's built-in coordinate transformation for accurate positioning
+    // This properly handles scaling, transforms, and viewBox
+    let svgPoint: SVGPoint;
+    try {
+      svgPoint = svg.createSVGPoint();
+      svgPoint.x = event.clientX;
+      svgPoint.y = event.clientY;
+      
+      // Transform point from screen coordinates to SVG coordinates
+      const ctm = svg.getScreenCTM();
+      if (ctm) {
+        svgPoint = svgPoint.matrixTransform(ctm.inverse());
+      } else {
+        // Fallback if CTM is not available
+        const svgWidth = parseFloat(svg.getAttribute('width') || String(this.gridWidth * this.CELL_SIZE));
+        const svgHeight = parseFloat(svg.getAttribute('height') || String(this.gridHeight * this.CELL_SIZE));
+        const mouseX = event.clientX - svgRect.left;
+        const mouseY = event.clientY - svgRect.top;
+        const scaleX = svgWidth / svgRect.width;
+        const scaleY = svgHeight / svgRect.height;
+        svgPoint.x = mouseX * scaleX;
+        svgPoint.y = mouseY * scaleY;
+      }
+    } catch (e) {
+      // Fallback calculation if SVG coordinate transformation fails
+      const svgWidth = parseFloat(svg.getAttribute('width') || String(this.gridWidth * this.CELL_SIZE));
+      const svgHeight = parseFloat(svg.getAttribute('height') || String(this.gridHeight * this.CELL_SIZE));
+      const mouseX = event.clientX - svgRect.left;
+      const mouseY = event.clientY - svgRect.top;
+      const scaleX = svgWidth / svgRect.width;
+      const scaleY = svgHeight / svgRect.height;
+      svgPoint = { x: mouseX * scaleX, y: mouseY * scaleY } as SVGPoint;
     }
-    
-    // Get mouse position relative to the SVG's displayed position
-    // getBoundingClientRect() already accounts for scroll, transforms, etc.
-    const mouseX = event.clientX - svgRect.left;
-    const mouseY = event.clientY - svgRect.top;
-    
-    // Calculate how much the SVG is scaled from its intrinsic size
-    // If SVG is 512px wide but displayed at 256px, scale is 2.0
-    const scaleX = svgWidth / svgRect.width;
-    const scaleY = svgHeight / svgRect.height;
-    
-    // Convert displayed coordinates to SVG coordinate system
-    const svgX = mouseX * scaleX;
-    const svgY = mouseY * scaleY;
 
     // Convert to grid cell coordinates (each cell is 32x32px in SVG coordinates)
-    const col = Math.floor(svgX / this.CELL_SIZE);
-    const row = Math.floor(svgY / this.CELL_SIZE);
-
-    // Debug logging to help diagnose issues (only when actively painting)
-    if (this.isPainting) {
-      console.log('Brush position calculation:', {
-        mouse: { clientX: event.clientX, clientY: event.clientY },
-        svgRect: { left: svgRect.left, top: svgRect.top, width: svgRect.width, height: svgRect.height },
-        mouseRelative: { x: mouseX, y: mouseY },
-        svgSize: { width: svgWidth, height: svgHeight },
-        scale: { x: scaleX, y: scaleY },
-        svgCoords: { x: svgX, y: svgY },
-        cell: { col, row },
-        cellSize: this.CELL_SIZE,
-        gridSize: { width: this.gridWidth, height: this.gridHeight }
-      });
-    }
+    const col = Math.floor(svgPoint.x / this.CELL_SIZE);
+    const row = Math.floor(svgPoint.y / this.CELL_SIZE);
 
     // Check bounds
     if (col < 0 || col >= this.gridWidth || row < 0 || row >= this.gridHeight) {
@@ -987,7 +983,8 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
     };
     
     // Include cell backgrounds in packed form (two nibbles per byte) only if varied
-    const hasVariation = this.cellBackgrounds.some(bg => bg !== this.BACKGROUND_TYPES.DEFAULT);
+    const defaultBgId = this.getDefaultBackgroundId();
+    const hasVariation = this.cellBackgrounds.some(bg => bg !== defaultBgId);
     if (hasVariation && this.cellBackgrounds.length > 0) {
       const packed = this.packBackgrounds(this.cellBackgrounds, this.gridWidth, this.gridHeight);
       data.bgp = this.uint8ToBase64(packed); // "bgp" = packed backgrounds
@@ -1103,12 +1100,13 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
     const output: number[] = [];
     let i = 0;
     
+    const defaultBgId = this.getDefaultBackgroundId();
     while (i < totalCells) {
-      const currentVal = (bg[i] ?? this.BACKGROUND_TYPES.DEFAULT) & 0x1f; // 5 bits (0-31)
+      const currentVal = (bg[i] ?? defaultBgId) & 0x1f; // 5 bits (0-31)
       let runLength = 1;
       
       // Check for run-length encoding opportunity (3+ consecutive identical values)
-      while (i + runLength < totalCells && runLength < 255 && (bg[i + runLength] ?? this.BACKGROUND_TYPES.DEFAULT) === currentVal) {
+      while (i + runLength < totalCells && runLength < 255 && (bg[i + runLength] ?? defaultBgId) === currentVal) {
         runLength++;
       }
       
@@ -1121,7 +1119,7 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
       } else {
         // Store individual values (1 byte each)
         for (let j = 0; j < runLength && i + j < totalCells; j++) {
-          output.push((bg[i + j] ?? this.BACKGROUND_TYPES.DEFAULT) & 0x1f);
+          output.push((bg[i + j] ?? defaultBgId) & 0x1f);
         }
         i += runLength;
       }
@@ -1349,6 +1347,383 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
       tokens: this.tokens,
       environmentObjects: this.environmentObjects
     };
+  }
+
+  /**
+   * Generate a random map based on the selected map type
+   */
+  generateRandomMap(): void {
+    const totalCells = this.gridWidth * this.gridHeight;
+    
+    // Clear existing environment objects and reset IDs
+    this.environmentObjects = [];
+    this.nextObjectId = 1;
+    
+    // Clear water
+    this.cellWater = new Array(totalCells).fill(false);
+    
+    // Define map type configurations (using background names, will be resolved to IDs)
+    const mapConfigs: {
+      [key: string]: {
+        backgrounds: { type: string; weight: number }[]; // type is now a name, not an ID
+        objects: { type: string; min: number; max: number; spacing: number }[];
+        water?: { probability: number; clusters: boolean; backgroundType?: string; edgeSide?: 'top' | 'bottom' | 'left' | 'right' }; // backgroundType is now a name
+      };
+    } = {
+      forest: {
+        backgrounds: [
+          { type: 'grass', weight: 70 },
+          { type: 'earth', weight: 30 }
+        ],
+        objects: [
+          // Use multiple tree variants for variety
+          { type: 'tree1', min: Math.floor(totalCells / 12), max: Math.floor(totalCells / 6), spacing: 2 },
+          { type: 'tree2', min: Math.floor(totalCells / 15), max: Math.floor(totalCells / 8), spacing: 2 },
+          { type: 'tree3', min: Math.floor(totalCells / 18), max: Math.floor(totalCells / 9), spacing: 2 },
+          { type: 'tree4', min: Math.floor(totalCells / 20), max: Math.floor(totalCells / 10), spacing: 2 },
+          { type: 'tree5', min: Math.floor(totalCells / 25), max: Math.floor(totalCells / 12), spacing: 2 },
+          { type: 'stone', min: Math.floor(totalCells / 30), max: Math.floor(totalCells / 15), spacing: 3 }
+        ]
+      },
+      beach: {
+        backgrounds: [
+          { type: 'sand', weight: 90 },
+          { type: 'stone', weight: 10 }
+        ],
+        objects: [
+          { type: 'stone', min: Math.floor(totalCells / 20), max: Math.floor(totalCells / 10), spacing: 3 },
+          { type: 'tree1', min: 0, max: Math.floor(totalCells / 25), spacing: 4 } // Palm trees (if available)
+        ],
+        water: { probability: 0, clusters: false, backgroundType: 'sand', edgeSide: 'bottom' }
+      },
+      town: {
+        backgrounds: [
+          { type: 'earth', weight: 45 },
+          { type: 'stone', weight: 35 },
+          { type: 'brick', weight: 20 }
+        ],
+        objects: [
+          { type: 'house', min: Math.floor(totalCells / 15), max: Math.floor(totalCells / 8), spacing: 4 },
+          { type: 'tree1', min: Math.floor(totalCells / 25), max: Math.floor(totalCells / 12), spacing: 3 },
+          { type: 'stone', min: Math.floor(totalCells / 30), max: Math.floor(totalCells / 20), spacing: 3 }
+        ]
+      },
+      desert: {
+        backgrounds: [
+          { type: 'sand', weight: 90 },
+          { type: 'stone', weight: 8 },
+          { type: 'earth', weight: 2 }
+        ],
+        objects: [
+          { type: 'stone', min: Math.floor(totalCells / 20), max: Math.floor(totalCells / 10), spacing: 4 },
+          { type: 'tree1', min: 0, max: Math.floor(totalCells / 30), spacing: 5 } // Rare cacti/trees
+        ]
+      },
+      cave: {
+        backgrounds: [
+          { type: 'stone', weight: 75 },
+          { type: 'earth', weight: 25 }
+        ],
+        objects: [
+          { type: 'stone', min: Math.floor(totalCells / 12), max: Math.floor(totalCells / 6), spacing: 2 },
+          { type: 'tree1', min: 0, max: Math.floor(totalCells / 40), spacing: 6 } // Rare mushrooms/plants
+        ]
+      },
+      plains: {
+        backgrounds: [
+          { type: 'grass', weight: 80 },
+          { type: 'earth', weight: 20 }
+        ],
+        objects: [
+          { type: 'tree1', min: Math.floor(totalCells / 20), max: Math.floor(totalCells / 10), spacing: 5 },
+          { type: 'tree2', min: Math.floor(totalCells / 25), max: Math.floor(totalCells / 15), spacing: 5 },
+          { type: 'stone', min: Math.floor(totalCells / 40), max: Math.floor(totalCells / 25), spacing: 4 }
+        ]
+      }
+    };
+
+    const config = mapConfigs[this.selectedMapType] || mapConfigs['forest'];
+
+    // Resolve background names to IDs
+    const resolvedBackgrounds: { type: number; weight: number }[] = config.backgrounds.map(bg => {
+      const bgId = this.getBackgroundIdByName(bg.type);
+      if (bgId === null) {
+        console.warn(`Background type "${bg.type}" not found, using default`);
+        return { type: this.getDefaultBackgroundId(), weight: bg.weight };
+      }
+      return { type: bgId, weight: bg.weight };
+    });
+
+    // Fill backgrounds based on map type
+    this.fillBackgroundsByType(resolvedBackgrounds);
+
+    // Generate water if configured
+    if (config.water) {
+      // Resolve water background type
+      let waterBackgroundType: number | undefined;
+      if (config.water.backgroundType) {
+        const resolvedType = this.getBackgroundIdByName(config.water.backgroundType);
+        waterBackgroundType = resolvedType ?? undefined;
+      }
+      this.generateWater({ ...config.water, backgroundType: waterBackgroundType }, resolvedBackgrounds);
+    }
+
+    // Place environment objects
+    this.placeEnvironmentObjects(config.objects);
+
+    // Emit data change and update preview
+    this.emitDataChanged();
+    this.updatePreview();
+  }
+
+  /**
+   * Fill backgrounds based on weighted random distribution
+   */
+  private fillBackgroundsByType(backgrounds: { type: number; weight: number }[]): void {
+    const totalWeight = backgrounds.reduce((sum, bg) => sum + bg.weight, 0);
+    
+    for (let i = 0; i < this.cellBackgrounds.length; i++) {
+      const random = Math.random() * totalWeight;
+      let accumulatedWeight = 0;
+      
+      for (const bg of backgrounds) {
+        accumulatedWeight += bg.weight;
+        if (random < accumulatedWeight) {
+          this.cellBackgrounds[i] = bg.type;
+          break;
+        }
+      }
+      
+      // Fallback to last background type if none selected (shouldn't happen, but safety check)
+      if (this.cellBackgrounds[i] === undefined && backgrounds.length > 0) {
+        this.cellBackgrounds[i] = backgrounds[backgrounds.length - 1].type;
+      }
+    }
+  }
+
+  /**
+   * Generate water cells based on configuration
+   * Water cells get backgrounds that match the map type's primary background
+   */
+  private generateWater(
+    config: { probability: number; clusters: boolean; backgroundType?: number; edgeSide?: 'top' | 'bottom' | 'left' | 'right' },
+    backgrounds: { type: number; weight: number }[]
+  ): void {
+    // Determine the background type for water cells
+    // If specified, use that; otherwise use the most common background from the map type
+    let waterBackgroundType: number;
+    if (config.backgroundType !== undefined) {
+      waterBackgroundType = config.backgroundType;
+    } else {
+      // Find the background type with the highest weight
+      if (backgrounds.length > 0) {
+        const primaryBackground = backgrounds.reduce((prev, curr) => 
+          curr.weight > prev.weight ? curr : prev
+        );
+        waterBackgroundType = primaryBackground.type;
+      } else {
+        waterBackgroundType = this.getDefaultBackgroundId();
+      }
+    }
+
+    // If edgeSide is specified, create water along one edge (all connected)
+    if (config.edgeSide) {
+      const waterDepth = Math.floor(this.gridHeight * 0.2) + Math.floor(Math.random() * Math.floor(this.gridHeight * 0.15)); // 20-35% of map height
+      
+      switch (config.edgeSide) {
+        case 'bottom':
+          // Water at the bottom edge, with some wave variation
+          for (let row = this.gridHeight - waterDepth; row < this.gridHeight; row++) {
+            for (let col = 0; col < this.gridWidth; col++) {
+              // Add slight wave variation to the water edge
+              const depthFromEdge = this.gridHeight - row - 1;
+              const waveVariation = Math.floor(Math.sin((col + row * 0.5) * 0.3) * 2);
+              const effectiveDepth = depthFromEdge + waveVariation;
+              
+              if (effectiveDepth >= 0 && effectiveDepth < waterDepth + 2) {
+                const index = row * this.gridWidth + col;
+                if (index >= 0 && index < this.cellWater.length) {
+                  this.cellWater[index] = true;
+                  this.cellBackgrounds[index] = waterBackgroundType;
+                }
+              }
+            }
+          }
+          break;
+        case 'top':
+          // Water at the top edge
+          for (let row = 0; row < waterDepth; row++) {
+            for (let col = 0; col < this.gridWidth; col++) {
+              const depthFromEdge = row;
+              const waveVariation = Math.floor(Math.sin((col + row * 0.5) * 0.3) * 2);
+              const effectiveDepth = depthFromEdge + waveVariation;
+              
+              if (effectiveDepth >= 0 && effectiveDepth < waterDepth + 2) {
+                const index = row * this.gridWidth + col;
+                if (index >= 0 && index < this.cellWater.length) {
+                  this.cellWater[index] = true;
+                  this.cellBackgrounds[index] = waterBackgroundType;
+                }
+              }
+            }
+          }
+          break;
+        case 'right':
+          // Water at the right edge
+          for (let col = this.gridWidth - waterDepth; col < this.gridWidth; col++) {
+            for (let row = 0; row < this.gridHeight; row++) {
+              const depthFromEdge = this.gridWidth - col - 1;
+              const waveVariation = Math.floor(Math.sin((row + col * 0.5) * 0.3) * 2);
+              const effectiveDepth = depthFromEdge + waveVariation;
+              
+              if (effectiveDepth >= 0 && effectiveDepth < waterDepth + 2) {
+                const index = row * this.gridWidth + col;
+                if (index >= 0 && index < this.cellWater.length) {
+                  this.cellWater[index] = true;
+                  this.cellBackgrounds[index] = waterBackgroundType;
+                }
+              }
+            }
+          }
+          break;
+        case 'left':
+          // Water at the left edge
+          for (let col = 0; col < waterDepth; col++) {
+            for (let row = 0; row < this.gridHeight; row++) {
+              const depthFromEdge = col;
+              const waveVariation = Math.floor(Math.sin((row + col * 0.5) * 0.3) * 2);
+              const effectiveDepth = depthFromEdge + waveVariation;
+              
+              if (effectiveDepth >= 0 && effectiveDepth < waterDepth + 2) {
+                const index = row * this.gridWidth + col;
+                if (index >= 0 && index < this.cellWater.length) {
+                  this.cellWater[index] = true;
+                  this.cellBackgrounds[index] = waterBackgroundType;
+                }
+              }
+            }
+          }
+          break;
+      }
+    } else if (config.clusters) {
+      // Create water clusters
+      const numClusters = Math.floor(Math.sqrt(this.gridWidth * this.gridHeight) / 5);
+      
+      for (let c = 0; c < numClusters; c++) {
+        const centerX = Math.floor(Math.random() * this.gridWidth);
+        const centerY = Math.floor(Math.random() * this.gridHeight);
+        const clusterSize = Math.floor(Math.random() * 5) + 2;
+        
+        for (let dy = -clusterSize; dy <= clusterSize; dy++) {
+          for (let dx = -clusterSize; dx <= clusterSize; dx++) {
+            const x = centerX + dx;
+            const y = centerY + dy;
+            
+            if (x >= 0 && x < this.gridWidth && y >= 0 && y < this.gridHeight) {
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              if (distance <= clusterSize && Math.random() < (1 - distance / clusterSize)) {
+                const index = y * this.gridWidth + x;
+                this.cellWater[index] = true;
+                // Water cells use the appropriate background for the map type
+                this.cellBackgrounds[index] = waterBackgroundType;
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Random water placement
+      for (let i = 0; i < this.cellWater.length; i++) {
+        if (Math.random() < config.probability) {
+          this.cellWater[i] = true;
+          // Water cells use the appropriate background for the map type
+          this.cellBackgrounds[i] = waterBackgroundType;
+        }
+      }
+    }
+  }
+
+  /**
+   * Place environment objects at random but reasonable locations
+   */
+  private placeEnvironmentObjects(
+    objectConfigs: { type: string; min: number; max: number; spacing: number }[]
+  ): void {
+    const occupiedPositions = new Set<string>();
+    
+    // Helper to check if position is available (with spacing)
+    const isPositionAvailable = (x: number, y: number, spacing: number): boolean => {
+      for (let dy = -spacing; dy <= spacing; dy++) {
+        for (let dx = -spacing; dx <= spacing; dx++) {
+          const checkX = x + dx;
+          const checkY = y + dy;
+          if (checkX >= 0 && checkX < this.gridWidth && checkY >= 0 && checkY < this.gridHeight) {
+            const key = `${checkX},${checkY}`;
+            if (occupiedPositions.has(key)) {
+              return false;
+            }
+          }
+        }
+      }
+      return true;
+    };
+
+    // Helper to mark positions as occupied
+    const markPositionOccupied = (x: number, y: number, spacing: number): void => {
+      for (let dy = -spacing; dy <= spacing; dy++) {
+        for (let dx = -spacing; dx <= spacing; dx++) {
+          const markX = x + dx;
+          const markY = y + dy;
+          if (markX >= 0 && markX < this.gridWidth && markY >= 0 && markY < this.gridHeight) {
+            occupiedPositions.add(`${markX},${markY}`);
+          }
+        }
+      }
+    };
+
+    // Place objects for each type
+    for (const objConfig of objectConfigs) {
+      const count = Math.floor(Math.random() * (objConfig.max - objConfig.min + 1)) + objConfig.min;
+      // For tree variants (tree1-tree8), use 'tree' to get default color/size
+      const baseType = objConfig.type.startsWith('tree') ? 'tree' : objConfig.type;
+      const defaultColor = this.defaultColors[baseType] || this.defaultColors['tree'] || '#228B22';
+      const defaultSize = this.availableObjectTypes.find(t => t.type === baseType)?.defaultSize || 80;
+
+      let placed = 0;
+      let attempts = 0;
+      const maxAttempts = count * 10; // Limit attempts to avoid infinite loops
+
+      while (placed < count && attempts < maxAttempts) {
+        attempts++;
+        
+        const x = Math.floor(Math.random() * this.gridWidth);
+        const y = Math.floor(Math.random() * this.gridHeight);
+
+        // Don't place objects in water cells
+        const index = y * this.gridWidth + x;
+        if (this.cellWater[index]) {
+          continue;
+        }
+
+        if (isPositionAvailable(x, y, objConfig.spacing)) {
+          // Place object at cell center (convert grid coordinates to pixel coordinates)
+          const pixelX = x * this.CELL_SIZE + this.CELL_SIZE / 2;
+          const pixelY = y * this.CELL_SIZE + this.CELL_SIZE / 2;
+
+          this.environmentObjects.push({
+            id: this.nextObjectId++,
+            type: objConfig.type as any,
+            x: pixelX,
+            y: pixelY,
+            color: defaultColor,
+            size: defaultSize
+          });
+
+          markPositionOccupied(x, y, objConfig.spacing);
+          placed++;
+        }
+      }
+    }
   }
 }
 
