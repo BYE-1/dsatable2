@@ -163,17 +163,18 @@ public class BattlemapImageController {
         builder.append("<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' ");
         builder.append("width='").append(width).append("' height='").append(height).append("'>");
 
-        appendDefs(builder);
-
         // Render cell-based backgrounds
         int gridW = request.getGridWidth() != null && request.getGridWidth() > 0 ? request.getGridWidth() : 16;
         int gridH = request.getGridHeight() != null && request.getGridHeight() > 0 ? request.getGridHeight() : 16;
         List<Integer> cellBackgrounds = request.getCellBackgrounds();
         
+        // Collect all defs first (clip paths, texture defs, water filter)
+        StringBuilder defsBuilder = new StringBuilder();
+        Map<String, StringBuilder> textureClipPathsByName = new HashMap<>();
+        Map<Integer, StringBuilder> textureClipPathsByType = new HashMap<>();
+        
         if (cellBackgrounds != null && !cellBackgrounds.isEmpty() && cellBackgrounds.size() >= gridW * gridH) {
-            // Group cells by texture type for efficient rendering
-            Map<Integer, StringBuilder> textureClipPaths = new HashMap<>();
-            
+            // First pass: collect clip paths and render simple backgrounds
             for (int row = 0; row < gridH; row++) {
                 for (int col = 0; col < gridW; col++) {
                     int index = row * gridW + col;
@@ -192,43 +193,64 @@ public class BattlemapImageController {
                         } else {
                             // Texture-based background - add to clip path with squiggly edges
                             String squigglyPath = generateSquigglyPath(x, y, 32, 32, col, row);
-                            textureClipPaths.computeIfAbsent(bgType, k -> new StringBuilder())
+                            textureClipPathsByType.computeIfAbsent(bgType, k -> new StringBuilder())
+                                    .append(squigglyPath);
+                            textureClipPathsByName.computeIfAbsent(textureName, k -> new StringBuilder())
                                     .append(squigglyPath);
                         }
                     }
                 }
             }
             
-            // Render clip paths and textured backgrounds for each texture type
-            for (Map.Entry<Integer, StringBuilder> entry : textureClipPaths.entrySet()) {
+            // Collect all texture defs and clip paths into defsBuilder
+            Set<String> loadedTextures = new HashSet<>();
+            for (Map.Entry<String, StringBuilder> entry : textureClipPathsByName.entrySet()) {
+                String textureName = entry.getKey();
+                String clipPathId = textureName + "-clip";
+                
+                // Add clip path definition
+                defsBuilder.append("<clipPath id='").append(clipPathId).append("'>");
+                defsBuilder.append(entry.getValue().toString());
+                defsBuilder.append("</clipPath>");
+                
+                // Add texture defs if not already loaded
+                if (!loadedTextures.contains(textureName)) {
+                    try {
+                        Integer textureId = textureService.getTextureId(textureName);
+                        if (textureId != null) {
+                            String textureSvg = textureService.getTextureSvg(textureId);
+                            if (textureSvg != null && !textureSvg.isEmpty()) {
+                                String textureDefs = extractDefsFromSvg(textureSvg);
+                                if (!textureDefs.isEmpty()) {
+                                    defsBuilder.append(textureDefs);
+                                    loadedTextures.add(textureName);
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Failed to load texture defs for: {}", textureName, e);
+                    }
+                }
+            }
+            
+            // Render textured backgrounds for each texture type
+            for (Map.Entry<Integer, StringBuilder> entry : textureClipPathsByType.entrySet()) {
                 int bgType = entry.getKey();
                 String textureName = textureService.getTextureName(bgType);
                 String clipPathId = textureName + "-clip";
                 String filterId = textureService.getFilterId(bgType);
                 String color = getBackgroundColor(bgType);
                 
-                // Add clip path definition
-                builder.append("<defs id='").append(textureName).append("-clip-def'><clipPath id='")
-                        .append(clipPathId).append("'>");
-                builder.append(entry.getValue().toString());
-                builder.append("</clipPath></defs>");
-                
                 // Render textured background with clip path
                 String textureSvg = textureService.getTextureSvg(bgType);
                 if (textureSvg != null && !textureSvg.isEmpty()) {
-                    // Extract filter and pattern definitions from texture SVG
-                    String textureDefs = extractDefsFromSvg(textureSvg);
-                    if (!textureDefs.isEmpty()) {
-                        builder.append("<defs>").append(textureDefs).append("</defs>");
-                    }
-                    
                     // Extract drawing elements (rects, paths, etc.) from texture SVG
                     String drawingElements = extractDrawingElementsFromSvg(textureSvg, clipPathId, width, height);
                     if (!drawingElements.isEmpty()) {
                         builder.append(drawingElements);
                     } else {
                         // Fallback: create a rect if no drawing elements found
-                        builder.append("<rect x='0' y='0' width='").append(width).append("' height='").append(height)
+                        builder.append("<rect x='-5' y='-5' width='").append(width).append("' height='").append(height)
                                 .append("' fill='").append(color).append("'");
                         if (!filterId.isEmpty()) {
                             builder.append(" filter='").append(filterId).append("'");
@@ -242,7 +264,7 @@ public class BattlemapImageController {
                 }
             }
             
-            logger.debug("Rendered {} cell backgrounds with {} texture types", cellBackgrounds.size(), textureClipPaths.size());
+            logger.debug("Rendered {} cell backgrounds with {} texture types", cellBackgrounds.size(), textureClipPathsByType.size());
         } else {
             // Fallback: solid default earth background
             Integer earthId = textureService.getTextureId("earth");
@@ -251,12 +273,33 @@ public class BattlemapImageController {
                     .append("' fill='").append(earthColor).append("'/>");
             logger.debug("No cell backgrounds provided, using default earth background");
         }
-
-        // Add water layer above backgrounds but below tokens
+        
+        // Add water filter definition to defs
+        appendWaterFilterDefs(defsBuilder);
+        
+        // Process water layer to get clip paths and rendering elements
         boolean[] cellWater = request.decodeWater();
+        WaterLayerResult waterResult = null;
         if (cellWater != null && cellWater.length > 0) {
             logger.debug("Rendering water layer for {} cells", cellWater.length);
-            builder.append(renderWaterLayer(cellWater, width, height, gridW, gridH));
+            waterResult = renderWaterLayer(cellWater, width, height, gridW, gridH);
+            if (waterResult != null && !waterResult.defs.isEmpty()) {
+                // Add water clip paths to defs
+                defsBuilder.append(waterResult.defs);
+            }
+        }
+        
+        // Write single defs element with all definitions (insert after SVG opening tag)
+        if (defsBuilder.length() > 0) {
+            int svgTagEnd = builder.indexOf(">");
+            if (svgTagEnd > 0) {
+                builder.insert(svgTagEnd + 1, "<defs>" + defsBuilder.toString() + "</defs>");
+            }
+        }
+        
+        // Add water layer above backgrounds but below tokens
+        if (waterResult != null && !waterResult.render.isEmpty()) {
+            builder.append(waterResult.render);
         }
 
         // Add tokens/objects on top of background (last elements = top layer in SVG)
@@ -274,46 +317,46 @@ public class BattlemapImageController {
         return SVGUtil.DOCTYPE + builder.toString();
     }
 
-    private void appendDefs(StringBuilder builder) {
-        builder.append("<defs>");
-        
-        // Dynamically load all texture definitions
-        List<BackgroundTextureService.BackgroundTextureInfo> textures = textureService.getAllTextures();
-        Set<String> loadedTextures = new HashSet<>();
-        
-        for (BackgroundTextureService.BackgroundTextureInfo texture : textures) {
-            String textureName = texture.getName();
-            if (!"default".equals(textureName) && !loadedTextures.contains(textureName)) {
-                try {
-                    String svgContent = textureService.getTextureSvg(texture.getId());
-                    if (svgContent != null && !svgContent.isEmpty()) {
-                        // Extract and append defs from texture SVG
-                        String defs = extractDefsFromSvg(svgContent);
-                        if (!defs.isEmpty()) {
-                            builder.append(defs);
-                            loadedTextures.add(textureName);
-                        }
-                    }
-                } catch (Exception e) {
-                    logger.warn("Failed to load texture defs for: {}", textureName, e);
-                }
-            }
-        }
-        
-        // Always include water filter definition here so it's available for water layer
+    /**
+     * Append water filter definition to the defs builder
+     */
+    private void appendWaterFilterDefs(StringBuilder defsBuilder) {
         try {
             String waterSvg = SVGUtil.getSvgFromFile("water");
             if (waterSvg != null && !waterSvg.isEmpty()) {
                 String waterFilterDefs = extractDefsFromSvg(waterSvg);
                 if (!waterFilterDefs.isEmpty()) {
-                    builder.append(waterFilterDefs);
+                    defsBuilder.append(waterFilterDefs);
                 }
             }
         } catch (Exception e) {
             logger.warn("Failed to load water filter definitions", e);
         }
         
-        builder.append("</defs>");
+        // Add edge wiggle filter for animated water edges
+        defsBuilder.append(createWaterEdgeWiggleFilter());
+    }
+    
+    /**
+     * Create an animated filter for water edge wiggling
+     * This creates turbulence-based displacement that animates the edges
+     */
+    private String createWaterEdgeWiggleFilter() {
+        return "<filter id='waterEdgeWiggle' x='-50%' y='-50%' width='200%' height='200%' filterUnits='userSpaceOnUse'>" +
+            // Create animated turbulence for edge displacement
+            "<feTurbulence type='fractalNoise' baseFrequency='0.03 0.05' numOctaves='2' seed='5' result='edgeNoise1'>" +
+            "  <animate attributeName='baseFrequency' values='0.03 0.05;0.05 0.03;0.03 0.05' dur='16s' repeatCount='indefinite'/>" +
+            "</feTurbulence>" +
+            "<feTurbulence type='fractalNoise' baseFrequency='0.02 0.04' numOctaves='2' seed='12' result='edgeNoise2'>" +
+            "  <animate attributeName='baseFrequency' values='0.02 0.04;0.04 0.02;0.02 0.04' dur='20s' repeatCount='indefinite'/>" +
+            "</feTurbulence>" +
+            "<feOffset in='edgeNoise1' dx='0' dy='0' result='offsetNoise1'>" +
+            "  <animate attributeName='dx' values='-50;50;-50' dur='12s' repeatCount='indefinite'/>" +
+            "  <animate attributeName='dy' values='-40;40;-40' dur='14s' repeatCount='indefinite'/>" +
+            "</feOffset>" +
+            "<feDisplacementMap in='edgeNoise2' in2='offsetNoise1' scale='5' xChannelSelector='R' yChannelSelector='G' result='combinedEdgeNoise'/>" +
+            "<feDisplacementMap in='SourceGraphic' in2='combinedEdgeNoise' scale='6' xChannelSelector='R' yChannelSelector='G'/>" +
+            "</filter>";
     }
     
     /**
@@ -343,7 +386,14 @@ public class BattlemapImageController {
         
         // Extract everything from <defs to </defs>, excluding the closing </defs> tag
         // We'll wrap it in <defs> tags ourselves, so we extract the inner content
-        return svgContent.substring(defsTagEnd + 1, defsEnd).trim();
+        String extracted = svgContent.substring(defsTagEnd + 1, defsEnd).trim();
+        
+        // Remove redundant xmlns attributes from child elements (namespace is already declared on root SVG)
+        // This prevents issues with animations and filter processing
+        extracted = extracted.replaceAll("\\s+xmlns\\s*=\\s*['\"]([^'\"]*)['\"]", "");
+        extracted = extracted.replaceAll("\\s+xmlns\\s*=\\s*['\"]http://www.w3.org/2000/svg['\"]", "");
+        
+        return extracted;
     }
     
     /**
@@ -680,56 +730,303 @@ public class BattlemapImageController {
     
     /**
      * Render water layer for cells that have water
-     * Creates a single path combining all water cells for better performance
+     * Creates clip paths for water blobs and applies them to a simple rect with the water filter
+     * Returns tuple: (clip paths to add to defs, rendering elements)
      */
-    private String renderWaterLayer(boolean[] cellWater, int canvasWidth, int canvasHeight, int gridWidth, int gridHeight) {
-        StringBuilder builder = new StringBuilder();
+    private WaterLayerResult renderWaterLayer(boolean[] cellWater, int canvasWidth, int canvasHeight, int gridWidth, int gridHeight) {
+        StringBuilder defsBuilder = new StringBuilder();
+        StringBuilder renderBuilder = new StringBuilder();
         
         // Note: Water filter definition is now included in appendDefs() method
         // so it's available in the main <defs> section of the SVG
         
-        // Build a single path that combines all water cells
         final int CELL_SIZE = 32;
-        StringBuilder pathData = new StringBuilder();
-        boolean hasWater = false;
+        final int CORNER_RADIUS = 8; // Radius for rounded corners
+        final int EDGE_OVERLAP = 5; // Pixels to overlap at map edges
         
-        for (int i = 0; i < cellWater.length && i < gridWidth * gridHeight; i++) {
-            if (cellWater[i]) {
-                int row = i / gridWidth;
-                int col = i % gridWidth;
-                int x = col * CELL_SIZE;
-                int y = row * CELL_SIZE;
-                int ex = x + CELL_SIZE >= canvasWidth ? 15:0;
-                int esx = x <= 0 ? -15:0;
-                int ey = y + CELL_SIZE >= canvasHeight ? 15:0;
-                int esy = y <= 0 ? -15:0;
-                
-                // Add rectangle to path: M (move to), then draw rectangle
-                // Format: M x,y L x+width,y L x+width,y+height L x,y+height Z
-                if (hasWater) {
-                    pathData.append(" ");
-                }
-                pathData.append(String.format(
-                    "M %d,%d L %d,%d L %d,%d L %d,%d Z",
-                    x + esx, y + esy,                           // Top-left
-                    x + CELL_SIZE + ex, y + esy,               // Top-right
-                    x + CELL_SIZE + ex, y + CELL_SIZE + ey,   // Bottom-right
-                    x + esx, y + CELL_SIZE + ey                 // Bottom-left
-                ));
-                hasWater = true;
+        // Find all connected water blobs
+        List<Set<Integer>> waterBlobs = findConnectedWaterBlobs(cellWater, gridWidth, gridHeight);
+        
+        if (waterBlobs.isEmpty()) {
+            return new WaterLayerResult("", "");
+        }
+        
+        // Check if water exists at any edge
+        boolean hasWaterAtTop = false;
+        boolean hasWaterAtBottom = false;
+        boolean hasWaterAtLeft = false;
+        boolean hasWaterAtRight = false;
+        
+        for (Set<Integer> blob : waterBlobs) {
+            for (Integer index : blob) {
+                int row = index / gridWidth;
+                int col = index % gridWidth;
+                if (row == 0) hasWaterAtTop = true;
+                if (row == gridHeight - 1) hasWaterAtBottom = true;
+                if (col == 0) hasWaterAtLeft = true;
+                if (col == gridWidth - 1) hasWaterAtRight = true;
             }
         }
         
-        // Render single path with all water cells if any water exists
-        // Use a base color - the filter's color matrix will transform it to the correct water color
-        if (hasWater) {
-            builder.append(String.format(
-                "<path d='%s' fill='#003f7f' filter='url(#waterFilter)' fill-opacity='0.5' fill-rule='evenodd'/>",
-                pathData.toString()
+        // Calculate extended bounds
+        int maskX = hasWaterAtLeft ? -EDGE_OVERLAP : 0;
+        int maskY = hasWaterAtTop ? -EDGE_OVERLAP : 0;
+        int maskWidth = canvasWidth + (hasWaterAtLeft ? EDGE_OVERLAP : 0) + (hasWaterAtRight ? EDGE_OVERLAP : 0);
+        int maskHeight = canvasHeight + (hasWaterAtTop ? EDGE_OVERLAP : 0) + (hasWaterAtBottom ? EDGE_OVERLAP : 0);
+        
+        int rectX = hasWaterAtLeft ? -EDGE_OVERLAP : 0;
+        int rectY = hasWaterAtTop ? -EDGE_OVERLAP : 0;
+        int rectWidth = canvasWidth + (hasWaterAtLeft ? EDGE_OVERLAP : 0) + (hasWaterAtRight ? EDGE_OVERLAP : 0);
+        int rectHeight = canvasHeight + (hasWaterAtTop ? EDGE_OVERLAP : 0) + (hasWaterAtBottom ? EDGE_OVERLAP : 0);
+        
+        // Combine all blob paths into a single clip path
+        StringBuilder combinedPathBuilder = new StringBuilder();
+        boolean firstPath = true;
+        
+        for (Set<Integer> blob : waterBlobs) {
+            // Create rounded path for this blob with edge overlap
+            String roundedPathData = createBlobPath(blob, cellWater, gridWidth, gridHeight, CELL_SIZE, CORNER_RADIUS, 
+                hasWaterAtTop, hasWaterAtBottom, hasWaterAtLeft, hasWaterAtRight, EDGE_OVERLAP);
+            
+            if (!roundedPathData.isEmpty()) {
+                if (firstPath) {
+                    combinedPathBuilder.append(roundedPathData);
+                    firstPath = false;
+                } else {
+                    combinedPathBuilder.append(" ").append(roundedPathData);
+                }
+            }
+        }
+        
+        if (combinedPathBuilder.length() > 0) {
+            String maskIdStr = "waterMask";
+            
+            // Create mask with the rounded path (with extended bounds if water is at edges)
+            // Apply edge wiggle filter to the path inside the mask to create animated edges
+            defsBuilder.append(String.format(
+                "<mask id='%s' maskUnits='userSpaceOnUse' x='%d' y='%d' width='%d' height='%d'>" +
+                    "<rect x='%d' y='%d' width='%d' height='%d' fill='black'/>" +
+                    "<g filter='url(#waterEdgeWiggle)'>" +
+                        "<path d='%s' fill='white' fill-rule='evenodd'/>" +
+                    "</g>" +
+                "</mask>",
+                maskIdStr, maskX, maskY, maskWidth, maskHeight,
+                maskX, maskY, maskWidth, maskHeight, combinedPathBuilder.toString()
+            ));
+            
+            // Render water as single rect with water filter and animated mask (with extended bounds if water is at edges)
+            // The mask has the wiggling filter applied to its path, creating animated edges
+            renderBuilder.append(String.format(
+                "<rect x='%d' y='%d' width='%d' height='%d' fill='#003f7f' filter='url(#waterFilter)' fill-opacity='0.7' mask='url(#%s)'/>",
+                rectX, rectY, rectWidth, rectHeight, maskIdStr
             ));
         }
         
-        return builder.toString();
+        return new WaterLayerResult(defsBuilder.toString(), renderBuilder.toString());
+    }
+    
+    /**
+     * Helper class to return both defs and rendering elements from water layer
+     */
+    private static class WaterLayerResult {
+        final String defs;
+        final String render;
+        
+        WaterLayerResult(String defs, String render) {
+            this.defs = defs;
+            this.render = render;
+        }
+    }
+    
+    /**
+     * Find all connected water blobs using flood-fill algorithm
+     */
+    private List<Set<Integer>> findConnectedWaterBlobs(boolean[] cellWater, int gridWidth, int gridHeight) {
+        List<Set<Integer>> blobs = new ArrayList<>();
+        boolean[] visited = new boolean[cellWater.length];
+        
+        for (int i = 0; i < cellWater.length && i < gridWidth * gridHeight; i++) {
+            if (cellWater[i] && !visited[i]) {
+                // Found a new water blob, flood-fill to find all connected tiles
+                Set<Integer> blob = new HashSet<>();
+                floodFillWater(cellWater, visited, blob, i, gridWidth, gridHeight);
+                if (!blob.isEmpty()) {
+                    blobs.add(blob);
+                }
+            }
+        }
+        
+        return blobs;
+    }
+    
+    /**
+     * Flood-fill algorithm to find all connected water tiles
+     */
+    private void floodFillWater(boolean[] cellWater, boolean[] visited, Set<Integer> blob, int startIndex, int gridWidth, int gridHeight) {
+        if (startIndex < 0 || startIndex >= cellWater.length || startIndex >= gridWidth * gridHeight) {
+            return;
+        }
+        
+        if (visited[startIndex] || !cellWater[startIndex]) {
+            return;
+        }
+        
+        visited[startIndex] = true;
+        blob.add(startIndex);
+        
+        int row = startIndex / gridWidth;
+        int col = startIndex % gridWidth;
+        
+        // Check 4-connected neighbors (top, right, bottom, left)
+        if (row > 0) {
+            floodFillWater(cellWater, visited, blob, startIndex - gridWidth, gridWidth, gridHeight);
+        }
+        if (col < gridWidth - 1) {
+            floodFillWater(cellWater, visited, blob, startIndex + 1, gridWidth, gridHeight);
+        }
+        if (row < gridHeight - 1) {
+            floodFillWater(cellWater, visited, blob, startIndex + gridWidth, gridWidth, gridHeight);
+        }
+        if (col > 0) {
+            floodFillWater(cellWater, visited, blob, startIndex - 1, gridWidth, gridHeight);
+        }
+    }
+    
+    /**
+     * Create a single path for a water blob with rounded corners
+     * @param edgeOverlap pixels to extend tiles at map edges
+     */
+    private String createBlobPath(Set<Integer> blob, boolean[] cellWater, int gridWidth, int gridHeight, int cellSize, int cornerRadius,
+                                   boolean hasWaterAtTop, boolean hasWaterAtBottom, boolean hasWaterAtLeft, boolean hasWaterAtRight, int edgeOverlap) {
+        if (blob.isEmpty()) {
+            return "";
+        }
+        
+        // Build path by checking each tile in the blob and determining which edges need rounding
+        StringBuilder pathBuilder = new StringBuilder();
+        boolean first = true;
+        
+        for (Integer index : blob) {
+            int row = index / gridWidth;
+            int col = index % gridWidth;
+            int x = col * cellSize;
+            int y = row * cellSize;
+            int width = cellSize;
+            int height = cellSize;
+            
+            // Extend tiles at map edges
+            if (row == 0 && hasWaterAtTop) {
+                y -= edgeOverlap;
+                height += edgeOverlap;
+            }
+            if (row == gridHeight - 1 && hasWaterAtBottom) {
+                height += edgeOverlap;
+            }
+            if (col == 0 && hasWaterAtLeft) {
+                x -= edgeOverlap;
+                width += edgeOverlap;
+            }
+            if (col == gridWidth - 1 && hasWaterAtRight) {
+                width += edgeOverlap;
+            }
+            
+            // Check neighbors
+            boolean hasTopNeighbor = row > 0;
+            boolean hasRightNeighbor = col < gridWidth - 1;
+            boolean hasBottomNeighbor = row < gridHeight - 1;
+            boolean hasLeftNeighbor = col > 0;
+            
+            boolean topIsWater = hasTopNeighbor && blob.contains(index - gridWidth);
+            boolean rightIsWater = hasRightNeighbor && blob.contains(index + 1);
+            boolean bottomIsWater = hasBottomNeighbor && blob.contains(index + gridWidth);
+            boolean leftIsWater = hasLeftNeighbor && blob.contains(index - 1);
+            
+            // Check diagonal neighbors
+            boolean topLeftIsWater = hasTopNeighbor && hasLeftNeighbor && blob.contains(index - gridWidth - 1);
+            boolean topRightIsWater = hasTopNeighbor && hasRightNeighbor && blob.contains(index - gridWidth + 1);
+            boolean bottomRightIsWater = hasBottomNeighbor && hasRightNeighbor && blob.contains(index + gridWidth + 1);
+            boolean bottomLeftIsWater = hasBottomNeighbor && hasLeftNeighbor && blob.contains(index + gridWidth - 1);
+            
+            // Determine which corners should be rounded
+            boolean roundTopLeft = hasTopNeighbor && hasLeftNeighbor && !topIsWater && !leftIsWater && !topLeftIsWater;
+            boolean roundTopRight = hasTopNeighbor && hasRightNeighbor && !topIsWater && !rightIsWater && !topRightIsWater;
+            boolean roundBottomRight = hasBottomNeighbor && hasRightNeighbor && !bottomIsWater && !rightIsWater && !bottomRightIsWater;
+            boolean roundBottomLeft = hasBottomNeighbor && hasLeftNeighbor && !bottomIsWater && !leftIsWater && !bottomLeftIsWater;
+            
+            // Create path for this tile (use extended dimensions)
+            String tilePath = createRoundedRectPath(x, y, width, height,
+                roundTopLeft ? cornerRadius : 0,
+                roundTopRight ? cornerRadius : 0,
+                roundBottomRight ? cornerRadius : 0,
+                roundBottomLeft ? cornerRadius : 0);
+            
+            if (first) {
+                pathBuilder.append(tilePath);
+                first = false;
+            } else {
+                // Combine paths using evenodd fill rule
+                pathBuilder.append(" ").append(tilePath);
+            }
+        }
+        
+        return pathBuilder.toString();
+    }
+    
+    /**
+     * Create an SVG path for a rounded rectangle with individual corner radii
+     * Path starts from top-left and goes clockwise
+     */
+    private String createRoundedRectPath(int x, int y, int width, int height, 
+                                         int rxTopLeft, int rxTopRight, int rxBottomRight, int rxBottomLeft) {
+        // If no rounding needed, return simple rectangle
+        if (rxTopLeft == 0 && rxTopRight == 0 && rxBottomRight == 0 && rxBottomLeft == 0) {
+            return String.format("M %d,%d L %d,%d L %d,%d L %d,%d Z",
+                x, y, x + width, y, x + width, y + height, x, y + height);
+        }
+        
+        StringBuilder path = new StringBuilder();
+        
+        // Start at top-left corner (after rounding if applicable)
+        if (rxTopLeft > 0) {
+            // Start below the rounded corner
+            path.append(String.format("M %d,%d ", x, y + rxTopLeft));
+            // Arc to top edge: from (x, y+rx) to (x+rx, y), 90 degree clockwise arc (sweep-flag=1)
+            path.append(String.format("A %d,%d 0 0 1 %d,%d ", rxTopLeft, rxTopLeft, x + rxTopLeft, y));
+        } else {
+            path.append(String.format("M %d,%d ", x, y));
+        }
+        
+        // Top edge to top-right corner
+        if (rxTopRight > 0) {
+            path.append(String.format("L %d,%d ", x + width - rxTopRight, y));
+            // Arc to right edge: from (x+width-rx, y) to (x+width, y+rx), 90 degree clockwise arc (sweep-flag=1)
+            path.append(String.format("A %d,%d 0 0 1 %d,%d ", rxTopRight, rxTopRight, x + width, y + rxTopRight));
+        } else {
+            path.append(String.format("L %d,%d ", x + width, y));
+        }
+        
+        // Right edge to bottom-right corner
+        if (rxBottomRight > 0) {
+            path.append(String.format("L %d,%d ", x + width, y + height - rxBottomRight));
+            // Arc to bottom edge: from (x+width, y+height-rx) to (x+width-rx, y+height), 90 degree clockwise arc (sweep-flag=1)
+            path.append(String.format("A %d,%d 0 0 1 %d,%d ", rxBottomRight, rxBottomRight, x + width - rxBottomRight, y + height));
+        } else {
+            path.append(String.format("L %d,%d ", x + width, y + height));
+        }
+        
+        // Bottom edge to bottom-left corner
+        if (rxBottomLeft > 0) {
+            path.append(String.format("L %d,%d ", x + rxBottomLeft, y + height));
+            // Arc to left edge: from (x+rx, y+height) to (x, y+height-rx), 90 degree clockwise arc (sweep-flag=1)
+            path.append(String.format("A %d,%d 0 0 1 %d,%d ", rxBottomLeft, rxBottomLeft, x, y + height - rxBottomLeft));
+        } else {
+            path.append(String.format("L %d,%d ", x, y + height));
+        }
+        
+        // Close path back to start
+        path.append("Z");
+        
+        return path.toString();
     }
 }
 

@@ -281,6 +281,11 @@
             (dragover)="onDragOver($event)"
             (drop)="onDrop($event)"
           >
+            <div 
+              *ngIf="previewSvgContent" 
+              [innerHTML]="previewSvgContent" 
+              class="preview-svg-content">
+            </div>
             <div *ngIf="selectedObjectId !== null" class="selection-hint">
               Click to place selected object
             </div>

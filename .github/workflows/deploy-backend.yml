@@ -35,7 +35,7 @@ jobs:
             API_BASE_URL="$PROD_API_BASE_URL"
           else
             # Default to production domain
-            API_BASE_URL="https://byedev.de/api"
+            API_BASE_URL="https://byedev.de/api/dsatable"
           fi
           
           echo "Setting API base URL to: $API_BASE_URL"
