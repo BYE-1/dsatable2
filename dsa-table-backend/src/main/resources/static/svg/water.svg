@@ -1,7 +1,7 @@
 <svg class="water" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <filter id="waterFilter"
-        x="-100%" y="-100%" width="300%" height="300%">
+        x="-100%" y="-100%" width="300%" height="300%" filterUnits="userSpaceOnUse">
 
     <!-- Noise layer 1 -->
     <feTurbulence type="fractalNoise"
@@ -20,13 +20,33 @@
         seed="8"
         result="noise2">
     </feTurbulence>
+    
+    <!-- Animate noise1 with circular motion -->
     <feOffset dx="0" dy="0" in="noise1" result="noise11"> 
-      <animate attributeName="dy" values="-512; 512" dur="80s" begin="0s" repeatCount="indefinite" calcMode="linear" restart="always" />
-      <animate attributeName="dx" values="-512; 512" dur="80s" begin="0s" repeatCount="indefinite" calcMode="linear" restart="always" />
+      <!-- Circular motion: dx = radius * cos(angle), dy = radius * sin(angle) -->
+      <!-- Using 32 keyframes for smooth circular motion (radius = 25, 11.25° per frame) -->
+      <animate attributeName="dx" 
+               values="25; 25; 23; 21; 18; 14; 10; 5; 0; -5; -10; -14; -18; -21; -23; -25; -25; -25; -23; -21; -18; -14; -10; -5; 0; 5; 10; 14; 18; 21; 23; 25; 25" 
+               dur="8s" begin="0s" repeatCount="indefinite" calcMode="linear" restart="always" />
+      <animate attributeName="dy" 
+               values="0; 5; 10; 14; 18; 21; 23; 25; 25; 25; 23; 21; 18; 14; 10; 5; 0; -5; -10; -14; -18; -21; -23; -25; -25; -25; -23; -21; -18; -14; -10; -5; 0" 
+               dur="8s" begin="0s" repeatCount="indefinite" calcMode="linear" restart="always" />
+    </feOffset>
+    
+    <!-- Animate noise2 with circular motion (clockwise, delayed) -->
+    <feOffset dx="0" dy="0" in="noise2" result="noise22"> 
+      <!-- Circular motion: dx = radius * cos(angle), dy = radius * sin(angle) -->
+      <!-- Using 32 keyframes for smooth circular motion (radius = 25, 11.25° per frame, 2s delay) -->
+      <animate attributeName="dx" 
+               values="25; 25; 23; 21; 18; 14; 10; 5; 0; -5; -10; -14; -18; -21; -23; -25; -25; -25; -23; -21; -18; -14; -10; -5; 0; 5; 10; 14; 18; 21; 23; 25; 25" 
+               dur="8s" begin="2s" repeatCount="indefinite" calcMode="linear" restart="always" />
+      <animate attributeName="dy" 
+               values="0; 5; 10; 14; 18; 21; 23; 25; 25; 25; 23; 21; 18; 14; 10; 5; 0; -5; -10; -14; -18; -21; -23; -25; -25; -25; -23; -21; -18; -14; -10; -5; 0" 
+               dur="8s" begin="2s" repeatCount="indefinite" calcMode="linear" restart="always" />
     </feOffset>
 
-    <!-- Displace noise2 using animated noise11 for movement effect -->
-    <feDisplacementMap in="noise2" in2="noise11"
+    <!-- Displace noise22 using animated noise11 for movement effect -->
+    <feDisplacementMap in="noise22" in2="noise11"
         scale="25"
         xChannelSelector="R"
         yChannelSelector="G"
@@ -47,10 +67,10 @@
 
     <!-- Displace -->
     <feComposite in="colorBlended" in2="SourceGraphic" operator="in" result="finalWater2" />
-    <feDisplacementMap in="finalWater2" in2="combinedNoise"
+    <!--<feDisplacementMap in="finalWater2" in2="combinedNoise"
         scale="25"
         xChannelSelector="R"
-        yChannelSelector="G" />
+        yChannelSelector="G" />-->
 
   </filter>
   </defs>

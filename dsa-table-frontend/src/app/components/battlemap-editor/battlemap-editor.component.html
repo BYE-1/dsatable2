@@ -283,11 +283,7 @@
           >
             <div 
               *ngIf="previewSvgContent" 
-              [innerHTML]="previewSvgContent" 
-              class="preview-svg-content">
-            </div>
-            <div *ngIf="selectedObjectId !== null" class="selection-hint">
-              Click to place selected object
+              [innerHTML]="previewSvgContent">
             </div>
           </div>
           <div *ngIf="!previewSvgContent && !previewUrl" class="preview-empty">

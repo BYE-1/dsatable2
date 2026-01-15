@@ -1078,6 +1078,22 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
     
     let processedSvg = this.rawSvgContent;
     
+    // Ensure SVG has explicit dimensions for filters to work correctly
+    // Extract width/height from SVG if present, or use calculated values
+    const widthMatch = processedSvg.match(/width=["'](\d+(?:\.\d+)?)["']/);
+    const heightMatch = processedSvg.match(/height=["'](\d+(?:\.\d+)?)["']/);
+    const svgWidth = widthMatch ? widthMatch[1] : String(this.gridWidth * this.CELL_SIZE);
+    const svgHeight = heightMatch ? heightMatch[1] : String(this.gridHeight * this.CELL_SIZE);
+    
+    // Ensure the root SVG element has explicit width and height for filter coordinate system
+    if (!widthMatch || !heightMatch) {
+      // Add width/height if missing
+      processedSvg = processedSvg.replace(
+        /<svg([^>]*)>/,
+        `<svg$1 width="${svgWidth}" height="${svgHeight}">`
+      );
+    }
+    
     // Add grid overlay if enabled
     if (this.showGrid) {
       processedSvg = this.addGridToSvg(processedSvg);
@@ -1161,51 +1177,28 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
     if (!selectedObject) {
       return svgContent;
     }
-
-    // Parse SVG to add highlight
-    const parser = new DOMParser();
-    const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
-    const svgElement = svgDoc.documentElement;
-    
-    // Get width and height from SVG
-    const width = parseFloat(svgElement.getAttribute('width') || String(this.gridWidth * this.CELL_SIZE));
-    const height = parseFloat(svgElement.getAttribute('height') || String(this.gridHeight * this.CELL_SIZE));
     
     // Calculate highlight size (object size + padding)
     const objectSize = selectedObject.size || 80;
     const highlightSize = objectSize + 20; // 10px padding on each side
-    const highlightX = selectedObject.x - highlightSize / 2;
-    const highlightY = selectedObject.y - highlightSize / 2;
+    const highlightRadius = highlightSize / 2;
     
-    // Create highlight element (circle with dashed border)
-    const highlight = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    highlight.setAttribute('cx', selectedObject.x.toString());
-    highlight.setAttribute('cy', selectedObject.y.toString());
-    highlight.setAttribute('r', (highlightSize / 2).toString());
-    highlight.setAttribute('fill', 'none');
-    highlight.setAttribute('stroke', '#2196F3'); // Blue color
-    highlight.setAttribute('stroke-width', '3');
-    highlight.setAttribute('stroke-dasharray', '5,5');
-    highlight.setAttribute('opacity', '0.8');
-    highlight.setAttribute('pointer-events', 'none');
-    highlight.setAttribute('id', 'selected-object-highlight');
+    // Create highlight element (circle with dashed border) using string manipulation
+    // This preserves filter definitions and references that DOM parsing might break
+    const highlight = `<circle cx="${selectedObject.x}" cy="${selectedObject.y}" r="${highlightRadius}" ` +
+      `fill="none" stroke="#2196F3" stroke-width="3" stroke-dasharray="5,5" ` +
+      `opacity="0.8" pointer-events="none" id="selected-object-highlight"/>`;
     
-    // Insert highlight before closing SVG tag
-    svgElement.appendChild(highlight);
-    
-    // Convert back to string
-    return new XMLSerializer().serializeToString(svgElement);
+    // Insert highlight before closing SVG tag (preserves all filter definitions)
+    return svgContent.replace('</svg>', highlight + '</svg>');
   }
 
   addGridToSvg(svgContent: string): string {
-    // Extract SVG viewBox or dimensions from the existing SVG
-    const parser = new DOMParser();
-    const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
-    const svgElement = svgDoc.documentElement;
-    
-    // Get width and height from SVG (should match map grid dimensions)
-    const width = parseFloat(svgElement.getAttribute('width') || String(this.gridWidth * this.CELL_SIZE));
-    const height = parseFloat(svgElement.getAttribute('height') || String(this.gridHeight * this.CELL_SIZE));
+    // Extract width and height from SVG using regex (avoid DOMParser to preserve filter definitions)
+    const widthMatch = svgContent.match(/width=["'](\d+(?:\.\d+)?)["']/);
+    const heightMatch = svgContent.match(/height=["'](\d+(?:\.\d+)?)["']/);
+    const width = widthMatch ? parseFloat(widthMatch[1]) : this.gridWidth * this.CELL_SIZE;
+    const height = heightMatch ? parseFloat(heightMatch[1]) : this.gridHeight * this.CELL_SIZE;
     
     // Generate grid lines based on actual map grid size (each cell is 32x32px)
     let gridSvg = '';
@@ -1228,7 +1221,11 @@ export class BattlemapEditorComponent implements OnInit, OnChanges, AfterViewIni
     // Wrap grid in a group and add it before closing the SVG tag
     const gridGroup = `<g id="grid-overlay">${gridSvg}</g>`;
     
-    // Insert grid before closing </svg> tag
+    // Insert grid before closing </svg> tag (use last occurrence to avoid replacing defs)
+    const lastSvgClose = svgContent.lastIndexOf('</svg>');
+    if (lastSvgClose !== -1) {
+      return svgContent.substring(0, lastSvgClose) + gridGroup + svgContent.substring(lastSvgClose);
+    }
     return svgContent.replace('</svg>', gridGroup + '</svg>');
   }
 
